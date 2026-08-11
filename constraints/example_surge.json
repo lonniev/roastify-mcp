@@ -1,0 +1,36 @@
+{
+  "tool_constraints": {
+    "forecast": {
+      "constraints": [
+        {
+          "type": "surge_pricing",
+          "max_capacity": 100,
+          "window": "1h",
+          "tiers": [
+            {"capacity_pct": 0.5, "multiplier": 1.5},
+            {"capacity_pct": 0.8, "multiplier": 2.0},
+            {"capacity_pct": 0.95, "multiplier": 3.0}
+          ]
+        },
+        {"type": "free_trial", "first_n_free": 3}
+      ]
+    },
+    "historical": {
+      "constraints": [
+        {
+          "type": "surge_pricing",
+          "max_capacity": 50,
+          "window": "1h",
+          "tiers": [
+            {"capacity_pct": 0.6, "multiplier": 2.0}
+          ]
+        }
+      ]
+    },
+    "*": {
+      "constraints": [
+        {"type": "happy_hour", "schedule": "12:00-14:00", "timezone": "UTC", "discount_percent": 50.0}
+      ]
+    }
+  }
+}

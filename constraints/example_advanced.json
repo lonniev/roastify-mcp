@@ -1,0 +1,27 @@
+{
+  "tool_constraints": {
+    "current": {
+      "constraints": [
+        {"type": "free_trial", "first_n_free": 10},
+        {"type": "loyalty_discount", "threshold_consumed_api_sats": 100, "discount_percent": 20.0}
+      ]
+    },
+    "forecast": {
+      "constraints": [
+        {"type": "temporal_window", "schedule": "06:00-22:00", "timezone": "America/New_York"},
+        {
+          "type": "bulk_bonus",
+          "tiers": [
+            {"min_consumed": 50, "bonus_multiplier": 1.1},
+            {"min_consumed": 200, "bonus_multiplier": 1.25}
+          ]
+        }
+      ]
+    },
+    "historical": {
+      "constraints": [
+        {"type": "finite_supply", "max_invocations": 50, "scope": "global"}
+      ]
+    }
+  }
+}

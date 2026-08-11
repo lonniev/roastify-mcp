@@ -1,0 +1,16 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.lonniev/roastify-mcp",
+  "description": "Roastify Developer API MCP Service — Tollbooth DPYC monetization",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/lonniev/roastify-mcp",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://roastify-mcp.fastmcp.app/mcp"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+# CODEOWNERS — the human gate for the agentic pipeline.
+#
+# Files covered here require @lonniev's review before merge (enforced by branch
+# protection: "Require review from Code Owners"). Files left UNCOVERED are eligible for
+# path-gated auto-merge once CI is green and QA applies qa/pass.
+#
+# The catch-all comes first and the carve-outs come after it, because CODEOWNERS is
+# LAST-MATCH-WINS. Written the other way round — listing only the paths that need review —
+# anything not on the list is ungated, including files that do not exist yet. Default-deny,
+# then carve out.
+
+# Everything needs review …
+* @lonniev
+
+# … except the paths the pipeline is trusted to land on its own. These match
+# auto-merge's low-risk allowlist, so what CODEOWNERS releases is exactly what
+# auto-merge will take.
+/tests/
+*.md
+
+# WHAT THE CATCH-ALL IS PROTECTING HERE. This operator keeps no ledger of its own — the
+# money paths live in the SDK — so the sensitive surface is credential handling, not
+# accounting. `src/roastify_mcp/server.py` holds the patron credential template and the
+# `_require_key` gate that resolves a caller's npub to their own vaulted Roastify key.
+# There is deliberately no operator-held key and no fallback, because Roastify scopes a
+# merchant's catalog and saved designs to the account behind the key; a change that
+# introduced a default key would hand one merchant's world to every caller. That is a
+# quiet, plausible-looking edit and exactly what the catch-all exists to catch.
+#
+# `src/roastify_mcp/roastify.py` is likewise covered: it is the only place the key is
+# put on the wire, and the only place upstream failures are turned into the named
+# situations a patron acts on.

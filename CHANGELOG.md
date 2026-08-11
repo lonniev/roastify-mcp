@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The factory apparatus, copied from the `tollbooth-sample` exemplar and adapted: 11
+  `agentic-*` workflows (service desk, QA, PR dialogue and revision, escalation,
+  housekeeper, engineering, approval- and auto-merge, block-retire, deploy-verify),
+  `doctrine-lint`, `release`, `publish-mcp-registry`, `server.json`, the pricing
+  constraint examples, and `.github/CODEOWNERS`.
+
+  The scaffold took only `ci.yml`, which left this repo a working operator wearing none
+  of the fleet's clothes: no code-owner gate, no doctrine lint, no GitHub Release on a
+  tag, and absent from the MCP registry. It merged its own first commits straight to
+  `main` with nothing in the way, which is why the gap went unnoticed.
+
+  CODEOWNERS is default-deny with `/tests/` and `*.md` carved out, matching what
+  auto-merge is trusted to land. Its note records what the catch-all is actually
+  protecting here — `_require_key` and the patron credential template, where a
+  plausible-looking edit introducing a default key would hand one merchant's catalog to
+  every caller.
+
 ### Changed
 
 - Artwork is a thin passthrough of Roastify's own async API: `generate_artwork` returns
