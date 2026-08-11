@@ -1,0 +1,50 @@
+# Roastify Design Bench
+
+> A web app for curating coffee packaging. Browse the Roastify catalog, open the
+> designs you saved in Roastify's Design Studio, and generate new packaging
+> artwork by changing the words on a template you already made. Identity is a
+> Nostr keypair (npub) — no account, no email, no subscription, no KYC.
+
+Roastify Design Bench is a single-page web app backed by roastify-mcp, a Model
+Context Protocol server. Humans use the web UI; AI agents can call the same MCP
+tools directly.
+
+## Bring your own Roastify key
+
+Every person connects their own Roastify account. Roastify scopes the catalog, a
+merchant's saved designs, and plan tier to the account behind the API key, so
+this service holds no key of its own — a shared key would return one merchant's
+catalog to everyone. Keys arrive as an encrypted Nostr direct message and are
+stored encrypted; the browser never sees one.
+
+## What it does
+
+- **Catalog** — the coffees and packaging available to your account, with roast
+  level, sizes, and stock.
+- **Designs** — the products you have already saved in Roastify.
+- **Bench** — change the named text on one of your designs and get print-ready
+  artwork back.
+
+## What it does not do
+
+- It cannot create, update, delete, or sync products. Roastify's API has no such
+  endpoints; saved products and storefront sync are Merchant App capabilities.
+- It does not place orders. That is left to Roastify and the merchant's store.
+- Artwork generation personalizes a template a human authored in Design Studio.
+  It cannot author a design from scratch, and the artwork it returns is not
+  attached to a product.
+
+## Reading a design
+
+Roastify identifies an editable layer by the name a person typed in Design
+Studio, and publishes no way to ask which names a design has. The Bench answers
+that in the browser: you open the design's exported .json and it lists the named
+layers, shows where each one prints on the unfolded box, and flags any value
+that prints in more than one place. The file is never uploaded.
+
+## Links
+
+- MCP service: https://roastify-mcp.fastmcp.app/mcp
+- Source: https://github.com/lonniev/roastify-mcp
+- Roastify: https://roastify.app
+- Monetized with Tollbooth DPYC: https://tollbooth-dpyc.com
