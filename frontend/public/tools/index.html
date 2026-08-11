@@ -1,0 +1,57 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Push design — operator tool</title>
+<style>
+  :root{--paper:#F2F4F1;--ink:#14171A;--ink2:#3B4248;--ink3:#69737A;--rule:#C9D1CA;--dieline:#0D7C7F;--kraft:#A9713C;--surface:#FBFCFA}
+  @media(prefers-color-scheme:dark){:root{--paper:#101312;--ink:#EAEEEA;--ink2:#B4BDB6;--ink3:#828D86;--rule:#2C3432;--dieline:#4FBFC0;--kraft:#C9924F;--surface:#171B1A}}
+  *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Avenir Next","Segoe UI",system-ui,sans-serif;line-height:1.6}
+  .wrap{max-width:760px;margin:0 auto;padding:34px 20px 80px}
+  .eyebrow{font-family:ui-monospace,Menlo,monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
+  h1{margin:.3rem 0 0;font-size:clamp(24px,4vw,32px);font-family:ui-monospace,Menlo,monospace;letter-spacing:-.02em}
+  h2{font-size:15px;margin:26px 0 8px}
+  .lede{color:var(--ink2);max-width:60ch}
+  .cut{border:0;border-top:1.5px dashed var(--rule);margin:24px 0;opacity:.8}
+  .bm{display:inline-block;background:var(--dieline);color:#0b1211;text-decoration:none;
+    font-weight:700;padding:12px 20px;border-radius:8px;font-family:ui-monospace,Menlo,monospace;font-size:15px}
+  ol{padding-left:1.2rem;color:var(--ink2)}li{margin:7px 0}
+  code{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:1px 5px;font-family:ui-monospace,Menlo,monospace;font-size:.85em}
+  .note{border-left:3px solid var(--kraft);background:var(--surface);padding:10px 14px;border-radius:0 4px 4px 0;color:var(--ink2);font-size:14px;margin:18px 0}
+  .note b{color:var(--ink)}
+  textarea{width:100%;height:70px;font-family:ui-monospace,Menlo,monospace;font-size:11px;
+    background:var(--surface);color:var(--ink);border:1px solid var(--rule);border-radius:6px;padding:8px}
+  a{color:var(--dieline)}
+</style>
+<div class="wrap">
+  <p class="eyebrow">roastify · operator tool</p>
+  <h1>Push design</h1>
+  <p class="lede">Copies one saved Roastify design onto another product. It runs on Roastify's own
+    Design Studio using your login, so it needs no dev console and works on an iPad. This is an
+    operator tool for your own account — separate from the patron Design Bench.</p>
+
+  <hr class="cut">
+
+  <h2>1 · Install the button (once)</h2>
+  <p class="lede"><b>On a Mac:</b> drag this to your bookmarks bar.</p>
+  <p><a class="bm" href="javascript:(()=&gt;{const s=document.createElement(&quot;script&quot;);s.src=&quot;https://roastify-app.pages.dev/tools/roastify-push.js?&quot;+Date.now();s.onerror=()=&gt;alert(&quot;Could not load the tool — check your connection.&quot;);document.body.appendChild(s);})();">➤ Push design</a></p>
+  <p class="lede"><b>On iPad:</b> bookmarklets can't be dragged. Easiest path — install it on a Mac
+    signed into the same iCloud, and it syncs to your iPad's bookmarks. Or add any page to
+    Favorites, then edit that bookmark and replace its address with the code below.</p>
+  <textarea readonly onclick="this.select()">javascript:(()=&gt;{const s=document.createElement(&quot;script&quot;);s.src=&quot;https://roastify-app.pages.dev/tools/roastify-push.js?&quot;+Date.now();s.onerror=()=&gt;alert(&quot;Could not load the tool — check your connection.&quot;);document.body.appendChild(s);})();</textarea>
+
+  <h2>2 · Use it</h2>
+  <ol>
+    <li>Open <code>merchant.roastify.app</code> and sign in.</li>
+    <li>Tap the <b>Push design</b> bookmark. A small panel appears, top-right.</li>
+    <li>Pick the design to copy <b>from</b>, and the product to put it <b>onto</b>.</li>
+    <li>Tap <b>Copy design →</b>. The panel reports each step and confirms from the server.</li>
+  </ol>
+
+  <div class="note"><b>The product it copies onto is overwritten.</b> The source is only read.
+    The target's thumbnail updates to the source's; open the target in the designer to see it
+    render. Use a throwaway product until you trust it.</div>
+
+  <p class="lede" style="font-size:13px;color:var(--ink3)">The tool loads fresh from this site each
+    time you tap it, so it always runs the current version — nothing to reinstall when it changes.</p>
+</div>
