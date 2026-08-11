@@ -1,0 +1,9 @@
+{
+  "name": "Roastify",
+  "server": "src/roastify_mcp/server.py",
+  "deployment": {
+    "env": {
+      "TOLLBOOTH_NOSTR_OPERATOR_NSEC": "${TOLLBOOTH_NOSTR_OPERATOR_NSEC}"
+    }
+  }
+}

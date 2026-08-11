@@ -1,0 +1,5 @@
+name: roastify-mcp
+install: pip install -e .
+command: python -m roastify_mcp.server
+runtime:
+  python: "3.12"
