@@ -1,3 +1,10 @@
+# The repo-root .gitignore is Python's, and its virtualenv section carries a
+# bare `lib/` — which matches ANY directory of that name, including this app's
+# src/lib. Nothing complains: the build passes locally because the files are on
+# disk, and only CI, checking out what git actually has, discovers they were
+# never committed.
+!src/lib/
+
 node_modules
 dist
 .wrangler
