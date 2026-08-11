@@ -7,6 +7,9 @@ dropshipper: it roasts, prints branded packaging, and ships direct to customers.
 This operator lets an AI agent read the Roastify catalog and generate packaging artwork,
 paid for in Bitcoin Lightning satoshis with no account, no KYC, and no subscription.
 
+**Web app:** <https://roastify-app.pages.dev> — the Design Bench, for people rather than agents.
+**MCP endpoint:** `https://roastify-mcp.fastmcp.app/mcp`
+
 ## What you're building
 
 ```
