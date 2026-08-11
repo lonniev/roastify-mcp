@@ -334,7 +334,9 @@ async def _run_artwork_job(npub: str = "", product_id: str = "",
         product_id,
         fields or [],
         idempotency_key=idempotency_key,
-        max_wait_seconds=settings.artwork_max_runtime_seconds,
+        # The innermost ring: give up polling before the job's own attempt ceiling,
+        # so a still-running upstream job is reported as such rather than reaped.
+        max_wait_seconds=settings.artwork_poll_budget_s,
     )
 
 
@@ -484,7 +486,7 @@ async def generate_artwork(
             "idempotency_key": client_req_id,
         },
         tool_id=GENERATE_ARTWORK_UUID,
-        max_runtime_seconds=settings.artwork_max_runtime_seconds,
+        max_runtime_seconds=settings.artwork_job_attempt_s,
         result_ttl_seconds=settings.artwork_result_ttl_seconds,
         expected_seconds=settings.artwork_expected_seconds,
     )

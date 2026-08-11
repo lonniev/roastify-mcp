@@ -5,6 +5,31 @@ All notable changes to roastify-mcp are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `modal_app.py` — detached execution for artwork jobs, following the eXcalibur
+  exemplar. The Modal container boots from `TOLLBOOTH_NOSTR_OPERATOR_NSEC` alone and
+  recovers the Neon URL and vault key over Nostr, so it holds exactly what Horizon
+  holds. `run_job` is a thin shim over the runtime's own `_run_job`; there is no second
+  implementation.
+- `.github/workflows/deploy-modal.yml` — redeploys whenever *what Modal executes*
+  changes, not merely when `modal_app.py` does, and asserts the live version carries the
+  deployed commit. eXcalibur ran a day on a stale container because a hand-push was
+  never repeated; this is that lesson.
+- `tests/test_modal_app.py` — pins the app name against the vaulted `modal_app_name`
+  (a rename is a two-part change) and keeps `run_job` a shim.
+
+### Changed
+
+- Artwork timeouts are now **nested rings** rather than one value:
+  `artwork_poll_budget_s` (900) < `artwork_job_attempt_s` (1125) <
+  `artwork_runner_timeout_s` (1407, baked into the Modal function). Previously the
+  runner's poll ceiling and the job store's staleness threshold were the same number, so
+  both expired in the same instant and a job still writing its result could be reaped as
+  stale — refunding work that had actually succeeded.
+
 ## [0.1.0] - 2026-08-11
 
 Initial scaffold, forked from the `tollbooth-sample` exemplar via the
