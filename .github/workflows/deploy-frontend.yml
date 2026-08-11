@@ -1,0 +1,73 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/deploy-frontend.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+        env:
+          VITE_MCP_URL: /mcp
+
+      # Self-provision the Pages project on first deploy so a fresh clone needs
+      # no manual `wrangler pages project create`. Idempotent: a create against
+      # an existing project is a no-op we tolerate.
+      - name: Ensure Pages project exists
+        working-directory: frontend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'roastify-app' }}
+        run: npx --yes wrangler@4 pages project create "$PROJECT" --production-branch main || true
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT || 'roastify-app' }}
+          workingDirectory: frontend
+
+      # Attach the custom domain to the Pages project. Idempotent: re-attaching an
+      # existing domain returns an error we tolerate. If the zone is on this same
+      # Cloudflare account, the DNS record + cert are provisioned automatically.
+      - name: Ensure custom domain
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'roastify-app' }}
+          DOMAIN: ${{ vars.CLOUDFLARE_PAGES_DOMAIN || 'roastify.tollbooth-dpyc.com' }}
+        run: |
+          echo "Attaching $DOMAIN to Pages project $PROJECT…"
+          curl -sS -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT}/domains" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data "{\"name\":\"${DOMAIN}\"}" | tee /tmp/domain.json
+          # Tolerate "already attached"; surface anything else without failing the deploy.
+          python3 -c "import json,sys; d=json.load(open('/tmp/domain.json')); print('OK' if d.get('success') else 'note: '+json.dumps(d.get('errors')))" || true
