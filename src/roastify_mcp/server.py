@@ -25,11 +25,10 @@ from pydantic import Field
 from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.credential_validators import validate_btcpay_creds
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
+from tollbooth.session_cache import SessionCache
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity
 
 from roastify_mcp import __version__, roastify
-from roastify_mcp.config import get_settings
-from roastify_mcp.session import clear_session, get_session, set_session
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +64,7 @@ mcp = FastMCP(
         "`roastify_generate_artwork` rewrites the named text and image "
         "placeholders of a design you authored in Design Studio. It cannot "
         "author a design from scratch, and the artwork URL it returns is not "
-        "attached to a product — you carry it onward yourself.\n\n"
+        "attached to a product — you carry it onward yourself. Rendering is asynchronous: `roastify_generate_artwork` hands back a job id and `roastify_artwork_status` checks it, free.\n\n"
         "## Pricing\n"
         "Tool prices are set dynamically by the operator's pricing model. Use "
         "`roastify_check_price` to preview costs and `roastify_check_balance` "
@@ -86,10 +85,7 @@ LIST_MY_PRODUCTS_UUID    = "4dafdf3e-6b7c-5690-a6ae-ae2d17163e0b"
 GET_MY_PRODUCT_UUID      = "67fbe1e5-0bc4-59cd-a2ed-2b32965f9c90"
 CHECK_STOCK_UUID         = "a145146f-f0d5-59c7-9d30-8365d800c09f"
 GENERATE_ARTWORK_UUID    = "eba5986f-659c-58c2-b269-ce7a5c4b51fe"
-FETCH_ARTWORK_UUID       = "27fab358-1f94-5e30-91a5-245bfd07f9e4"
 ARTWORK_STATUS_UUID      = "d2fc68a3-95bd-5345-8e1c-9f8230db791c"
-
-ARTWORK_JOB_KIND = "roastify_artwork"
 
 _DOMAIN_TOOLS = [
     ToolIdentity(
@@ -117,16 +113,14 @@ _DOMAIN_TOOLS = [
         intent="Check stock for one SKU or the whole list",
     ),
     ToolIdentity(
-        tool_id=GENERATE_ARTWORK_UUID, capability="generate_artwork", category="heavy",
+        tool_id=GENERATE_ARTWORK_UUID, capability="generate_artwork", category="write",
         intent="Generate packaging artwork from a saved Design Studio template",
     ),
+    # Free by category — the wheel gates it without consulting Neon. Polling is how
+    # you learn the work finished; metering each look would charge for waiting.
     ToolIdentity(
-        tool_id=FETCH_ARTWORK_UUID, capability="fetch_artwork", category="read",
-        intent="Redeem an artwork claim check",
-    ),
-    ToolIdentity(
-        tool_id=ARTWORK_STATUS_UUID, capability="artwork_status", category="read",
-        intent="Poll a Roastify artwork job directly by its upstream job id",
+        tool_id=ARTWORK_STATUS_UUID, capability="artwork_status", category="free",
+        intent="Check a Roastify artwork job",
     ),
 ]
 
@@ -199,9 +193,14 @@ runtime = OperatorRuntime(
 )
 
 
+# One patron's Roastify key, held only long enough to spare the vault a read per
+# call. Persistence is the SDK vault's job; nothing durable lives here.
+_keys: SessionCache[str] = SessionCache(ttl_seconds=900)
+
+
 def _on_credentials_forgotten(service: str, npub: str) -> None:
     """Drop the cached key so the next call re-reads the vault (and finds none)."""
-    clear_session(npub)
+    _keys.clear(npub)
     _revoked_npubs.add(npub)
     logger.info("Session cleared for %s (service=%s)", npub[:20], service)
 
@@ -275,13 +274,13 @@ async def _require_key(npub: str) -> str:
     upstream 401 passed through.
     """
     if npub in _revoked_npubs:
-        clear_session(npub)
+        _keys.clear(npub)
         _revoked_npubs.discard(npub)
         raise ValueError(_SESSION_GUIDANCE["credentials_revoked"])
 
-    session = get_session(npub)
-    if session:
-        return session.api_key
+    cached = _keys.get(npub)
+    if cached:
+        return cached
 
     # The wheel hands back (creds, situation). A situation means the vault
     # could not be read AT ALL, which is emphatically not the same as a patron
@@ -292,7 +291,7 @@ async def _require_key(npub: str) -> str:
             _SESSION_GUIDANCE.get(vault_situation, _SESSION_GUIDANCE["vault_bootstrapping"]),
         )
     if creds and creds.get("api_key"):
-        return set_session(npub, creds["api_key"]).api_key
+        return _keys.set(npub, creds["api_key"])
     if creds is not None:
         raise ValueError(_SESSION_GUIDANCE["operator_not_configured"])
     raise ValueError(_SESSION_GUIDANCE["no_credentials"])
@@ -310,37 +309,8 @@ async def _call(npub: str, fn: Any, *args: Any, **kwargs: Any) -> dict[str, Any]
         return await fn(api_key, *args, **kwargs)
     except roastify.RoastifyError as exc:
         if exc.status == 401:
-            clear_session(npub)
+            _keys.clear(npub)
         return exc.as_dict()
-
-
-# ---------------------------------------------------------------------------
-# Artwork job runner — registered by name so a recycled container can resume
-# ---------------------------------------------------------------------------
-
-
-async def _run_artwork_job(npub: str = "", product_id: str = "",
-                           fields: list[dict[str, Any]] | None = None,
-                           idempotency_key: str = "", **_: Any) -> dict[str, Any]:
-    """Perform one artwork generation, start to finish, off the request path.
-
-    Raises on failure so the SDK's job store records it and refunds the fare —
-    the operator keeps nothing for work that produced no artwork.
-    """
-    settings = get_settings()
-    api_key = await _require_key(npub)
-    return await roastify.generate_artwork(
-        api_key,
-        product_id,
-        fields or [],
-        idempotency_key=idempotency_key,
-        # The innermost ring: give up polling before the job's own attempt ceiling,
-        # so a still-running upstream job is reported as such rather than reaped.
-        max_wait_seconds=settings.artwork_poll_budget_s,
-    )
-
-
-runtime.register_job_runner(ARTWORK_JOB_KIND, _run_artwork_job)
 
 
 # ---------------------------------------------------------------------------
@@ -447,14 +417,14 @@ async def generate_artwork(
 ) -> dict[str, Any]:
     """Generate packaging artwork from one of your saved Design Studio designs.
 
-    This personalizes a template you already authored: it rewrites that
-    design's named text and image placeholders. It cannot author a design from
-    scratch, and the artwork it produces is NOT attached to a product —
-    Roastify's API has no product-create or storefront-sync surface. You get an
-    artwork URL and carry it onward yourself.
+    This personalizes a template you already authored: it rewrites that design's
+    named text and image placeholders. It cannot author a design from scratch, and
+    the artwork it produces is NOT attached to a product — Roastify's API has no
+    product-create or storefront-sync surface. You get an artwork URL and carry it
+    onward yourself.
 
-    Generation is asynchronous, so this returns a claim check immediately.
-    Redeem it with roastify_fetch_artwork.
+    Roastify renders asynchronously, so this returns a job id straight away. Check
+    it with roastify_artwork_status, which is free.
 
     Args:
         product_id: A saved design's id, from list_my_products.
@@ -469,56 +439,22 @@ async def generate_artwork(
     invalid = roastify.validate_artwork_fields(fields)
     if invalid:
         return {"success": False, "error": invalid}
-
-    # Prove the patron is onboarded BEFORE persisting a job — a claim check
-    # that can only ever resolve to "you have no credentials" is worse than a
-    # refusal here.
-    await _require_key(npub)
-
-    settings = get_settings()
-    return await runtime.start_async_job(
-        ARTWORK_JOB_KIND,
-        npub,
-        {
-            "npub": npub,
-            "product_id": product_id,
-            "fields": fields,
-            "idempotency_key": client_req_id,
-        },
-        tool_id=GENERATE_ARTWORK_UUID,
-        max_runtime_seconds=settings.artwork_job_attempt_s,
-        result_ttl_seconds=settings.artwork_result_ttl_seconds,
-        expected_seconds=settings.artwork_expected_seconds,
-    )
-
-
-@tool
-@runtime.paid_tool(FETCH_ARTWORK_UUID)
-async def fetch_artwork(claim: str, npub: _NPUB = "",
-                        dpop_token: str = "") -> dict[str, Any]:
-    """Redeem an artwork claim check from roastify_generate_artwork.
-
-    Reports every lifecycle state as guidance, including still-running. A job
-    that fails refunds its fare.
-
-    Args:
-        claim: The claim check returned by roastify_generate_artwork.
-    """
-    return await runtime.fetch_async_job(claim, npub)
+    result = await _call(npub, roastify.start_artwork, product_id, fields, client_req_id)
+    if result.get("success") is False:
+        return result
+    return {"success": True, **result}
 
 
 @tool
 @runtime.paid_tool(ARTWORK_STATUS_UUID)
 async def artwork_status(job_id: str, npub: _NPUB = "",
                          dpop_token: str = "") -> dict[str, Any]:
-    """Poll a Roastify artwork job directly by its upstream job id.
+    """Check a Roastify artwork job. Free — polling never costs anything.
 
-    An escape hatch for a job whose claim check outlived its result window, or
-    one that was still running when the durable runner gave up. Prefer
-    roastify_fetch_artwork with a claim check.
+    A finished job carries ``artwork_url``; a failed one carries ``error``.
 
     Args:
-        job_id: The Roastify job id.
+        job_id: The job id returned by roastify_generate_artwork.
     """
     if not job_id:
         return {"success": False, "error": "job_id is required"}

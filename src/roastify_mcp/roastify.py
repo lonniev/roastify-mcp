@@ -29,10 +29,6 @@ import httpx
 _BASE = "https://api.roastify.app/v1"
 _TIMEOUT = 20.0
 
-# Upstream allows 100 requests/min per key. Composed tools fan out a few
-# GETs per call, so keep the fan-out small and bounded.
-_MAX_FANOUT = 8
-
 
 class RoastifyError(Exception):
     """An upstream failure worth surfacing to the caller by name.
@@ -299,68 +295,3 @@ async def get_artwork_status(api_key: str, job_id: str) -> dict[str, Any]:
         "artwork_url": data.get("artworkUrl"),
         "error": data.get("error"),
     }
-
-
-# Upstream never publishes its status vocabulary, so treat anything that is not
-# a known terminal state as still-running rather than guessing it failed.
-_DONE = {"COMPLETED", "COMPLETE", "SUCCEEDED", "SUCCESS", "DONE", "READY", "FINISHED"}
-_FAILED = {"FAILED", "FAILURE", "ERROR", "CANCELED", "CANCELLED"}
-
-
-def artwork_terminal_state(status: Any) -> str | None:
-    """Classify an upstream status as ``done``, ``failed``, or ``None`` (running)."""
-    token = str(status or "").strip().upper()
-    if token in _DONE:
-        return "done"
-    if token in _FAILED:
-        return "failed"
-    return None
-
-
-async def generate_artwork(api_key: str, product_id: str, fields: list[dict[str, Any]],
-                           idempotency_key: str = "",
-                           max_wait_seconds: int = 600,
-                           poll_seconds: float = 3.0) -> dict[str, Any]:
-    """Start artwork generation and poll it to a terminal state.
-
-    This is the body of the durable job runner. It is deliberately the only
-    place that blocks: the tool that requests artwork returns a claim check
-    immediately, and this runs detached where a long wait costs nothing.
-
-    Raises :class:`RoastifyError` on upstream failure so the SDK's job store
-    records the failure and refunds — the operator does not keep a fare for
-    work that did not produce artwork.
-    """
-    started = await start_artwork(api_key, product_id, fields, idempotency_key)
-    job_id = started.get("job_id")
-    if not job_id:
-        raise RoastifyError("Roastify accepted the request but returned no job id.")
-
-    waited = 0.0
-    last = {"job_id": job_id, "status": started.get("status")}
-    while waited < max_wait_seconds:
-        await asyncio.sleep(poll_seconds)
-        waited += poll_seconds
-        last = await get_artwork_status(api_key, job_id)
-        state = artwork_terminal_state(last.get("status"))
-        if state == "done":
-            return {
-                "success": True,
-                "job_id": job_id,
-                "status": last.get("status"),
-                "artwork_url": last.get("artwork_url"),
-                "waited_seconds": int(waited),
-            }
-        if state == "failed":
-            raise RoastifyError(
-                last.get("error") or f"Roastify artwork generation ended as {last.get('status')}.",
-                code=last.get("status"),
-            )
-
-    # Not a failure — the job may still finish. Say which, and hand back the
-    # upstream id so the caller can keep asking without paying to start over.
-    raise RoastifyError(
-        f"Roastify artwork job {job_id} was still {last.get('status')!r} after "
-        f"{int(waited)}s. It may still complete — poll it with roastify_artwork_status.",
-        code="still_running",
-    )

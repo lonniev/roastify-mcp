@@ -201,15 +201,6 @@ def test_validate_artwork_fields_accepts_a_well_formed_list():
 # ---------------------------------------------------------------------------
 
 
-def test_unknown_status_is_treated_as_running_not_failed():
-    """Upstream never published its status vocabulary — never guess failure."""
-    assert roastify.artwork_terminal_state("PROCESSING") is None
-    assert roastify.artwork_terminal_state("QUEUED") is None
-    assert roastify.artwork_terminal_state("") is None
-    assert roastify.artwork_terminal_state("COMPLETED") == "done"
-    assert roastify.artwork_terminal_state("failed") == "failed"
-
-
 @respx.mock
 async def test_start_artwork_sends_idempotency_key():
     route = respx.post(f"{BASE}/artwork/new").mock(
@@ -235,92 +226,28 @@ async def test_start_artwork_omits_idempotency_header_when_unset():
 
 
 @respx.mock
-async def test_generate_artwork_polls_to_completion():
-    respx.post(f"{BASE}/artwork/new").mock(
-        return_value=httpx.Response(202, json={"jobId": "j1", "status": "QUEUED"}),
-    )
+async def test_get_artwork_status_passes_the_upstream_state_through():
+    """The status vocabulary is Roastify's. Report it; do not reinterpret it."""
     respx.get(f"{BASE}/artwork/status/j1").mock(
-        side_effect=[
-            httpx.Response(200, json={"jobId": "j1", "status": "PROCESSING"}),
-            httpx.Response(200, json={"jobId": "j1", "status": "COMPLETED",
-                                      "artworkUrl": "https://cdn/x.png"}),
-        ],
+        return_value=httpx.Response(200, json={"jobId": "j1", "status": "COMPLETED",
+                                               "artworkUrl": "https://cdn/x.png"}),
     )
 
-    result = await roastify.generate_artwork(
-        KEY, "p1", [{"fieldId": "t", "type": "text", "value": "v"}],
-        poll_seconds=0.0, max_wait_seconds=10,
-    )
+    result = await roastify.get_artwork_status(KEY, "j1")
 
-    assert result["success"] is True
+    assert result["status"] == "COMPLETED"
     assert result["artwork_url"] == "https://cdn/x.png"
 
 
 @respx.mock
-async def test_generate_artwork_raises_on_upstream_failure_so_the_fare_refunds():
-    respx.post(f"{BASE}/artwork/new").mock(
-        return_value=httpx.Response(202, json={"jobId": "j1", "status": "QUEUED"}),
-    )
-    respx.get(f"{BASE}/artwork/status/j1").mock(
-        return_value=httpx.Response(200, json={"jobId": "j1", "status": "FAILED",
+async def test_a_failed_job_carries_the_upstream_error():
+    respx.get(f"{BASE}/artwork/status/j2").mock(
+        return_value=httpx.Response(200, json={"jobId": "j2", "status": "FAILED",
                                                "error": "template field missing"}),
     )
 
-    with pytest.raises(roastify.RoastifyError) as excinfo:
-        await roastify.generate_artwork(
-            KEY, "p1", [{"fieldId": "t", "type": "text", "value": "v"}],
-            poll_seconds=0.0, max_wait_seconds=10,
-        )
+    result = await roastify.get_artwork_status(KEY, "j2")
 
-    assert "template field missing" in str(excinfo.value)
-
-
-@respx.mock
-async def test_generate_artwork_distinguishes_still_running_from_failed():
-    """A job that outran the ceiling is not a failure — say so, and keep the id."""
-    respx.post(f"{BASE}/artwork/new").mock(
-        return_value=httpx.Response(202, json={"jobId": "j9", "status": "QUEUED"}),
-    )
-    respx.get(f"{BASE}/artwork/status/j9").mock(
-        return_value=httpx.Response(200, json={"jobId": "j9", "status": "PROCESSING"}),
-    )
-
-    with pytest.raises(roastify.RoastifyError) as excinfo:
-        await roastify.generate_artwork(
-            KEY, "p1", [{"fieldId": "t", "type": "text", "value": "v"}],
-            poll_seconds=0.0, max_wait_seconds=0.0,
-        )
-
-    assert excinfo.value.code == "still_running"
-    assert "j9" in str(excinfo.value)
-
-
-@respx.mock
-async def test_missing_job_id_is_an_error_not_a_silent_success():
-    respx.post(f"{BASE}/artwork/new").mock(return_value=httpx.Response(202, json={}))
-
-    with pytest.raises(roastify.RoastifyError):
-        await roastify.generate_artwork(
-            KEY, "p1", [{"fieldId": "t", "type": "text", "value": "v"}],
-            poll_seconds=0.0, max_wait_seconds=10,
-        )
-
-
-# ---------------------------------------------------------------------------
-# Session hygiene
-# ---------------------------------------------------------------------------
-
-
-def test_patron_session_repr_redacts_the_key():
-    from roastify_mcp.session import PatronSession
-
-    session = PatronSession(api_key="rty_live_supersecret")
-    assert "supersecret" not in repr(session)
-    assert "<redacted>" in repr(session)
-
-
-def test_test_keys_are_distinguishable_from_live_keys():
-    from roastify_mcp.session import PatronSession
-
-    assert PatronSession(api_key="rty_test_x").is_test_key is True
-    assert PatronSession(api_key="rty_live_x").is_test_key is False
+    assert result["status"] == "FAILED"
+    assert result["error"] == "template field missing"
+    assert result["artwork_url"] is None

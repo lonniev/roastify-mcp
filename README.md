@@ -89,9 +89,8 @@ exercising the read tools without touching production.
 | `roastify_list_my_products` | read | Your saved designs, cursor-paginated |
 | `roastify_get_my_product` | read | One saved design in full |
 | `roastify_check_stock` | read | Stock for one SKU or the whole list |
-| `roastify_generate_artwork` | heavy | Generate artwork from a saved design → claim check |
-| `roastify_fetch_artwork` | read | Redeem the claim check |
-| `roastify_artwork_status` | read | Poll a Roastify job directly by upstream job id |
+| `roastify_generate_artwork` | write | Generate artwork from a saved design |
+| `roastify_artwork_status` | free | Check that job |
 
 Plus the standard DPYC catalog (balance, purchase, courier, pricing, Oracle, status).
 
@@ -122,22 +121,23 @@ size, and price; everything else about a coffee's character is prose in its desc
 selection is correspondingly weaker than it looks, and this operator does not dress up an
 LLM's reading of a description as structured provenance data.
 
-## Artwork is a durable job
+## Artwork is asynchronous
 
-Roastify generates artwork asynchronously with no published SLA, so
-`roastify_generate_artwork` returns a **claim check** immediately rather than holding the
-request open. The work runs detached — on [Modal](https://modal.com) when the operator has
-couriered long-runner credentials, in-process otherwise — and survives a serverless recycle.
+Roastify renders artwork on its own servers, so `roastify_generate_artwork` hands back a job
+id straight away and `roastify_artwork_status` checks it. Status checks are **free** — you
+learn the work finished by looking, and charging for each look would be charging for waiting.
 
 ```
-claim = roastify_generate_artwork(product_id=..., fields=[...], client_req_id="my-req-1")
-roastify_fetch_artwork(claim=claim)   # poll; every state answers with guidance
+job = roastify_generate_artwork(product_id=..., fields=[...], client_req_id="my-req-1")
+roastify_artwork_status(job_id=job["job_id"])   # free, poll until artwork_url appears
 ```
 
-One fare per firing, charged when the work is *requested*. A job that fails refunds it — the
-operator keeps nothing for work that produced no artwork. Pass `client_req_id` and a repeated
-request is safe: it becomes Roastify's `Idempotency-Key`, so the artwork is not generated
-twice.
+Pass `client_req_id` and a repeated request is safe: it becomes Roastify's
+`Idempotency-Key`, so the artwork is not generated twice.
+
+The operator does no waiting of its own — both calls return immediately — so there is no
+detached executor here and nothing to recycle. That machinery would earn its place only if
+this operator ever rendered artwork itself.
 
 ## Development
 
