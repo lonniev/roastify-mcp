@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `frontend/public/tools/` — an **operator-only** design-push tool, deployed alongside the FE
+  but deliberately not part of the patron Design Bench. Roastify's Design Studio talks a
+  private tRPC API (`/api/trpc`) authenticated by a Clerk session cookie, not the public API
+  key, so it can only be driven from inside the merchant origin on the operator's own login.
+  A bookmarklet injects `roastify-push.js` into `merchant.roastify.app`, where it renders its
+  own panel (source/target pickers, live status, server-side verification) — no dev console, so
+  it works on an iPad. It copies one saved design's JSON, preview, and mockups onto another
+  product using the same calls the Save button makes. `tools/index.html` is the install page.
+
+### Added
+
 - The factory apparatus, copied from the `tollbooth-sample` exemplar and adapted: 11
   `agentic-*` workflows (service desk, QA, PR dialogue and revision, escalation,
   housekeeper, engineering, approval- and auto-merge, block-retire, deploy-verify),
