@@ -33,33 +33,44 @@
   const STORAGE = "https://storage.roastify.app/";
   const asset = (url) => ({ s3Key: typeof url === "string" ? url.replace(/^https?:\/\/storage\.roastify\.app\//, "") : "", imageUrl: url });
 
-  // Populate a design's fonts[] from the fonts its text uses. The current Designer
-  // loads fonts FROM this array; old designs left it empty and fell back.
-  const wnum = (v) => (typeof v === "number" ? v : ({ bold: 700, normal: 400 })[String(v || "").toLowerCase()] ?? 400);
-  const buildFonts = (design) => {
+  // Rebuild a design's fonts[] to declare exactly the families its text uses.
+  //
+  // Roastify migrated their design format (Polotno `pages`, schemaVersion 2 →
+  // their own `elements`/`faceBackgrounds`), and their saved designs key each
+  // font entry `family` — so we match the app's own output, not the Polotno
+  // store's `fontFamily`. We REBUILD rather than append: a stale/invalid entry
+  // (e.g. the migration wrote Fjalla One as :wght@700, a weight it doesn't ship)
+  // must not survive, because one url that 404s makes the Designer's font-load
+  // batch reject and blanks EVERY font. And we ASK Google Fonts whether the
+  // requested weights resolve, falling back to the plain family (always loads,
+  // bold degrades to synthetic) when a weight is missing.
+  const wnum = (v) => (typeof v === "number" ? v : ({ bold: 700, bolder: 700, normal: 400, lighter: 300 })[String(v || "").toLowerCase()] ?? (parseInt(v, 10) || 400));
+  const cssUrl = (fam, weights) =>
+    `https://fonts.googleapis.com/css2?family=${fam.replace(/ /g, "+")}${weights && weights.length ? `:wght@${weights.join(";")}` : ""}&display=swap`;
+  const resolvableUrl = async (fam, weights) => {
+    const w = [...new Set(weights)].sort((a, b) => a - b);
+    const plain = cssUrl(fam, null);
+    if (w.length === 1 && w[0] === 400) return plain; // matches Roastify's single-400 convention
+    try {
+      const css = await fetch(cssUrl(fam, w)).then((r) => (r.ok ? r.text() : ""));
+      if (css.toLowerCase().includes(fam.toLowerCase())) return cssUrl(fam, w); // Google kept the family → weights are valid
+    } catch { /* fall through to plain */ }
+    return plain; // a requested weight is missing → plain family still loads
+  };
+  const repairFonts = async (design) => {
     const used = {};
     const walk = (n) => { if (Array.isArray(n)) n.forEach(walk); else if (n && typeof n === "object") { if (n.type === "text" && n.fontFamily) (used[n.fontFamily] = used[n.fontFamily] || new Set()).add(wnum(n.fontWeight)); Object.values(n).forEach(walk); } };
-    walk(design.pages || design);
-    const have = new Set((design.fonts || []).map((f) => f.fontFamily || f.family));
-    const added = [];
+    walk(design.pages || design); // new format has no `pages`; walking the whole design finds `elements` text too
+    const fonts = [];
     for (const fam of Object.keys(used)) {
-      if (have.has(fam)) continue;
       const weights = [...used[fam]].sort((a, b) => a - b);
-      // Request the plain family, NOT ":wght@<weights>". A design can mark text
-      // "bold" in a font that only ships one weight (e.g. Fjalla One has no 700):
-      // css2 then drops that family, its FontFace load rejects, and the Designer's
-      // Promise.all over all fonts rejects — blanking EVERY font, not just the one.
-      // The plain family URL always resolves, so the batch always registers.
-      // Polotno loads a design's fonts with loadFont(entry.fontFamily) — the store
-      // key is fontFamily, NOT family. Writing only `family` (the template format)
-      // left fontFamily undefined, so loadFont(undefined) loaded nothing and every
-      // font fell back. Carry fontFamily (what the store reads) plus family/weights/
-      // url for template-format compatibility.
-      added.push({ fontFamily: fam, family: fam, weights, url: `https://fonts.googleapis.com/css2?family=${fam.replace(/ /g, "+")}&display=swap` });
+      fonts.push({ family: fam, weights, url: await resolvableUrl(fam, weights) });
     }
-    design.fonts = [...(design.fonts || []), ...added];
-    return added.length;
+    design.fonts = fonts;
+    return fonts;
   };
+  const readDesign = async (dj) =>
+    typeof dj === "object" ? dj : /^https?:/.test(dj) ? await fetch(dj).then((r) => r.json()) : JSON.parse(dj);
   const rowsOf = (r) => (Array.isArray(r) ? r : r?.products ?? r?.items ?? r?.data ?? r?.rows ?? []);
   const idOf = (p) => p.id ?? p.editProductId ?? p.productId ?? p._id;
   const mockupsOf = (p) =>
@@ -99,6 +110,7 @@
         <div><label>Copy the design FROM</label><select id="src"></select></div>
         <div><label>ONTO (this product is overwritten)</label><select id="dst"></select></div>
         <button id="go" disabled>Loading products&#8230;</button>
+        <button id="fix" class="alt">Fix fonts on source (in place)</button>
         <button id="insp" class="alt">Inspect source&#8217;s fonts</button>
         <div class="warn" id="warn"></div>
         <pre id="log">ready.</pre>
@@ -120,7 +132,7 @@
   const label = (p) => (p.title || p.name || idOf(p));
 
   const loadProducts = async () => {
-    $("go").disabled = true; $("insp").disabled = true;
+    $("go").disabled = true; $("insp").disabled = true; $("fix").disabled = true;
     try {
       let list = rowsOf(await query("products.getAllProducts", { page: 1, pageSize: 100, sorting: [] }));
       if (!list.length) list = rowsOf(await query("products.getAllProducts", { page: 0, pageSize: 100, sorting: [] }));
@@ -131,7 +143,7 @@
       if (!list.length) { $("go").textContent = "no products found"; return; }
       $("src").selectedIndex = si >= 0 && si < list.length ? si : 0;
       $("dst").selectedIndex = di >= 0 && di < list.length ? di : Math.min(1, list.length - 1);
-      $("go").disabled = false; $("insp").disabled = false; $("go").textContent = "Copy design →";
+      $("go").disabled = false; $("insp").disabled = false; $("fix").disabled = false; $("go").textContent = "Copy design →";
       log(`${list.length} products loaded.`);
     } catch (e) { $("go").textContent = "load failed"; log("✗ " + e.message); }
   };
@@ -139,23 +151,61 @@
   $("r").onpointerup = (e) => { e.stopPropagation(); };
   loadProducts();
 
-  $("insp").onclick = () => {
+  $("insp").onclick = async () => {
     const p = PRODUCTS[+$("src").value];
     if (!p) return;
     $("log").textContent = `inspecting “${label(p)}” font spec`;
-    const dj = p.designJson;
-    if (typeof dj === "string" && /^https?:/.test(dj)) { log("designJson is a URL (not inline): " + dj); return; }
-    let d; try { d = typeof dj === "object" ? dj : JSON.parse(dj); } catch { d = null; }
+    let d; try { d = await readDesign(p.designJson); } catch (e) { log("could not read designJson: " + e.message); return; }
     if (!d) { log("could not read designJson; keys: " + Object.keys(p).join(", ")); return; }
+    log("format: " + (d.pages ? "Polotno pages (old)" : d.elements ? "Roastify elements (current)" : "unknown"));
     log("root fonts[] : " + JSON.stringify(d.fonts || []).slice(0, 600));
-    const texts = [];
-    const walk = (n) => { if (Array.isArray(n)) n.forEach(walk); else if (n && typeof n === "object") { if (n.type === "text") texts.push(n); Object.values(n).forEach(walk); } };
+    const used = {};
+    const walk = (n) => { if (Array.isArray(n)) n.forEach(walk); else if (n && typeof n === "object") { if (n.type === "text" && n.fontFamily) (used[n.fontFamily] = used[n.fontFamily] || new Set()).add(wnum(n.fontWeight)); Object.values(n).forEach(walk); } };
     walk(d.pages || d);
-    log(`${texts.length} text layers. sample font props:`);
-    for (const t of texts.slice(0, 5)) {
-      const fp = { family: t.fontFamily, weight: t.fontWeight, style: t.fontStyle, src: t.fontURL || t.fontSrc || t.src || t.url || undefined };
-      log(`  “${String(t.text || "").replace(/\s+/g, " ").slice(0, 20)}” → ${JSON.stringify(fp)}`);
-    }
+    const declared = new Set((d.fonts || []).map((f) => f.family || f.fontFamily));
+    const missing = Object.keys(used).filter((f) => !declared.has(f));
+    log(`text uses: ${Object.keys(used).join(", ") || "none"}`);
+    if (missing.length) log("⚠ used but NOT declared: " + missing.join(", "));
+  };
+
+  // In-place repair: rebuild THIS product's fonts[] and write it back to itself,
+  // reusing its own preview + mockups. This fixes a design already saved in the
+  // current format whose fonts[] is incomplete (e.g. a Roastify migration that
+  // dropped a family or wrote an invalid weight).
+  $("fix").onclick = async () => {
+    const p = PRODUCTS[+$("src").value];
+    $("warn").textContent = "";
+    if (!p) return;
+    if (!p.designImageUrl) { $("warn").textContent = "product has no saved design image."; return; }
+    $("fix").disabled = true; $("go").disabled = true;
+    $("log").textContent = `fixing fonts on “${label(p)}”`;
+    try {
+      const pid = idOf(p);
+      log("reading design…");
+      const design = await readDesign(p.designJson);
+      const before = JSON.stringify(design.fonts || []);
+      const fonts = await repairFonts(design);
+      log(`fonts[] rebuilt → ${fonts.map((f) => `${f.family}[${f.weights.join("/")}]`).join(", ") || "none"}`);
+      if (JSON.stringify(fonts) === before) log("(no change — already correct)");
+
+      log("uploading JSON…");
+      const jsonKey = `design-json/${rid()}.json`;
+      const jput = await mutate("aws.getPresignedUrl", { filename: jsonKey, filetype: "application/json" });
+      const ju = await fetch(jput, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(design) });
+      if (!ju.ok) throw new Error("json upload HTTP " + ju.status);
+
+      const preview = asset(p.designImageUrl);
+      const imageUrls = mockupsOf(p).map(asset);
+      if (!imageUrls.length) imageUrls.push(preview);
+      log("writing updateDesign (same product)…");
+      await mutate("products.updateDesign", {
+        productId: pid, cleanJsonUrl: STORAGE + jsonKey, s3KeyJson: jsonKey,
+        cleanImageUrl: preview.imageUrl, s3KeyImage: preview.s3Key, imageUrls,
+      });
+      log("✓ done. Reopen this product in the Designer — fonts should render now.");
+      await loadProducts();
+    } catch (e) { log("✗ " + e.message); }
+    finally { $("fix").disabled = false; $("go").disabled = false; }
   };
 
   $("go").onclick = async () => {
@@ -171,10 +221,9 @@
       const targetId = idOf(target);
 
       log("reading source design…");
-      const dj = source.designJson;
-      const design = typeof dj === "object" ? dj : /^https?:/.test(dj) ? await fetch(dj).then((r) => r.json()) : JSON.parse(dj);
-      const nf = buildFonts(design);
-      log(`design ${JSON.stringify(design).length.toLocaleString()} bytes; fonts[] repaired +${nf} (now ${design.fonts.length}).`);
+      const design = await readDesign(source.designJson);
+      const fonts = await repairFonts(design);
+      log(`design ${JSON.stringify(design).length.toLocaleString()} bytes; fonts[] rebuilt: ${fonts.map((f) => f.family).join(", ") || "none"}.`);
 
       log("uploading a copy of the JSON…");
       const jsonKey = `design-json/${rid()}.json`;
