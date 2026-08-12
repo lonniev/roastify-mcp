@@ -41,6 +41,26 @@
   // target at the source's existing image objects avoids the fetch entirely and
   // still makes the target visibly show the source's design.
   const asset = (url) => ({ s3Key: (typeof url === "string" ? url.replace(/^https?:\/\/storage\.roastify\.app\//, "") : ""), imageUrl: url });
+
+  // Populate the design's fonts[] from the fonts its text actually uses. Roastify's
+  // current Designer loads fonts FROM this array; older designs left it empty and so
+  // render with a fallback. This writes the same {family, weights, url} shape their
+  // templates use, adding only families not already declared.
+  const wnum = (v) => (typeof v === "number" ? v : ({ bold: 700, normal: 400 })[String(v || "").toLowerCase()] ?? 400);
+  const buildFonts = (design) => {
+    const used = {};
+    const walk = (n) => { if (Array.isArray(n)) n.forEach(walk); else if (n && typeof n === "object") { if (n.type === "text" && n.fontFamily) (used[n.fontFamily] = used[n.fontFamily] || new Set()).add(wnum(n.fontWeight)); Object.values(n).forEach(walk); } };
+    walk(design.pages || design);
+    const have = new Set((design.fonts || []).map((f) => f.family));
+    const added = [];
+    for (const fam of Object.keys(used)) {
+      if (have.has(fam)) continue;
+      const weights = [...used[fam]].sort((a, b) => a - b);
+      added.push({ family: fam, weights, url: `https://fonts.googleapis.com/css2?family=${fam.replace(/ /g, "+")}:wght@${weights.join(";")}&display=swap` });
+    }
+    design.fonts = [...(design.fonts || []), ...added];
+    return added.length;
+  };
   const rowsOf = (r) => (Array.isArray(r) ? r : r?.products ?? r?.items ?? r?.data ?? r?.rows ?? []);
   const idOf = (p) => p.id ?? p.editProductId ?? p.productId ?? p._id;
   const mockupsOf = (p) =>
@@ -79,6 +99,7 @@
         <div><label>Copy the design FROM</label><select id="src"></select></div>
         <div><label>ONTO (this product is overwritten)</label><select id="dst"></select></div>
         <button id="go" disabled>Loading products…</button>
+        <button id="insp" style="background:#3B4248;color:#e8ece6">Inspect source’s fonts</button>
         <div class="warn" id="warn"></div>
         <pre id="log">ready.</pre>
       </div>
@@ -112,6 +133,26 @@
     } catch (e) { $("go").textContent = "load failed"; log("✗ " + e.message); }
   })();
 
+  $("insp").onclick = () => {
+    const p = PRODUCTS[+$("src").value];
+    if (!p) return;
+    $("log").textContent = `inspecting “${label(p)}” font spec`;
+    const dj = p.designJson;
+    if (typeof dj === "string" && /^https?:/.test(dj)) { log("designJson is a URL (not inline): " + dj); return; }
+    let d; try { d = typeof dj === "object" ? dj : JSON.parse(dj); } catch { d = null; }
+    if (!d) { log("could not read designJson; keys: " + Object.keys(p).join(", ")); return; }
+    log("root fonts[] : " + JSON.stringify(d.fonts || []).slice(0, 600));
+    const texts = [];
+    const walk = (n) => { if (Array.isArray(n)) n.forEach(walk); else if (n && typeof n === "object") { if (n.type === "text") texts.push(n); Object.values(n).forEach(walk); } };
+    walk(d.pages || d);
+    log(`${texts.length} text layers. sample font props:`);
+    for (const t of texts.slice(0, 5)) {
+      const fp = { family: t.fontFamily, weight: t.fontWeight, style: t.fontStyle,
+        src: t.fontURL || t.fontSrc || t.src || t.url || undefined };
+      log(`  "${String(t.text || "").replace(/\s+/g, " ").slice(0, 20)}" → ${JSON.stringify(fp)}`);
+    }
+  };
+
   $("go").onclick = async () => {
     const source = PRODUCTS[+$("src").value], target = PRODUCTS[+$("dst").value];
     $("warn").textContent = "";
@@ -128,6 +169,8 @@
       const dj = source.designJson;
       const design = typeof dj === "object" ? dj : /^https?:/.test(dj) ? await fetch(dj).then((r) => r.json()) : JSON.parse(dj);
       log(`design ${JSON.stringify(design).length.toLocaleString()} bytes.`);
+      const nf = buildFonts(design);
+      log(`fonts[] repaired: +${nf} (now ${design.fonts.length} declared)`);
 
       log("uploading a copy of the JSON…");
       const jsonKey = `design-json/${rid()}.json`;
