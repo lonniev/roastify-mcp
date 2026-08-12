@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Roastify Design Courier
-// @namespace    https://roastify-app.pages.dev
+// @namespace    https://roastify.tollbooth-dpyc.com
 // @version      1.0
 // @description  Launch the Design Courier on Roastify to shuttle designs to/from your Design Bench. Works in iPad Safari via the Userscripts extension.
 // @author       DPYC
@@ -29,7 +29,7 @@
     });
     btn.addEventListener("click", function () {
       const s = document.createElement("script");
-      s.src = "https://roastify-app.pages.dev/tools/courier.js?" + Date.now();
+      s.src = "https://roastify.tollbooth-dpyc.com/tools/courier.js?" + Date.now();
       s.onerror = function () { alert("Could not load the courier — check your connection."); };
       document.body.appendChild(s);
     });
