@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 // the Bench — so a relative /mcp would resolve to the merchant, which has no
 // proxy. Bake the Bench's absolute /mcp proxy URL (its CORS is *), so tool
 // calls reach roastify-mcp from the merchant origin.
-const MCP_PROXY = "https://roastify-app.pages.dev/mcp";
+const MCP_PROXY = "https://roastify.tollbooth-dpyc.com/mcp";
 
 // Built as a standalone IIFE into dist/tools/courier.js, alongside the static
 // public/tools/ files the main build copies there. emptyOutDir:false so this
