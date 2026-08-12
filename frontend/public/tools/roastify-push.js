@@ -40,7 +40,7 @@
     const used = {};
     const walk = (n) => { if (Array.isArray(n)) n.forEach(walk); else if (n && typeof n === "object") { if (n.type === "text" && n.fontFamily) (used[n.fontFamily] = used[n.fontFamily] || new Set()).add(wnum(n.fontWeight)); Object.values(n).forEach(walk); } };
     walk(design.pages || design);
-    const have = new Set((design.fonts || []).map((f) => f.family));
+    const have = new Set((design.fonts || []).map((f) => f.fontFamily || f.family));
     const added = [];
     for (const fam of Object.keys(used)) {
       if (have.has(fam)) continue;
@@ -50,7 +50,12 @@
       // css2 then drops that family, its FontFace load rejects, and the Designer's
       // Promise.all over all fonts rejects — blanking EVERY font, not just the one.
       // The plain family URL always resolves, so the batch always registers.
-      added.push({ family: fam, weights, url: `https://fonts.googleapis.com/css2?family=${fam.replace(/ /g, "+")}&display=swap` });
+      // Polotno loads a design's fonts with loadFont(entry.fontFamily) — the store
+      // key is fontFamily, NOT family. Writing only `family` (the template format)
+      // left fontFamily undefined, so loadFont(undefined) loaded nothing and every
+      // font fell back. Carry fontFamily (what the store reads) plus family/weights/
+      // url for template-format compatibility.
+      added.push({ fontFamily: fam, family: fam, weights, url: `https://fonts.googleapis.com/css2?family=${fam.replace(/ /g, "+")}&display=swap` });
     }
     design.fonts = [...(design.fonts || []), ...added];
     return added.length;
