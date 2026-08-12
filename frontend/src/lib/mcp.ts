@@ -842,6 +842,58 @@ export async function getMyProduct(productId: string) {
   });
 }
 
+// ─── Design library ──────────────────────────────────────────────────────
+// The patron's own designs, held in the operator's Neon (npub-scoped). The
+// courier stashes a product's design here; the Bench edits it; the courier
+// fetches it back to write onto a product. Storage only — never touches
+// Roastify. Mirrors the four server tools.
+
+export interface StoredDesignMeta {
+  design_id: string;
+  label: string;
+  product_id: string;
+  source_title: string;
+  bytes: number;
+  updated_at?: string;
+}
+
+export interface FetchedDesign extends StoredDesignMeta {
+  design: Record<string, unknown>;
+}
+
+export async function stashDesign(
+  design: Record<string, unknown>,
+  opts: { label?: string; productId?: string; sourceTitle?: string; designId?: string } = {},
+) {
+  return callTool<{
+    success: boolean; design_id: string; bytes: number; assets: number; error?: string;
+  }>("stash_design", {
+    design,
+    label: opts.label ?? "",
+    product_id: opts.productId ?? "",
+    source_title: opts.sourceTitle ?? "",
+    design_id: opts.designId ?? "",
+  });
+}
+
+export async function fetchDesign(designId: string) {
+  return callTool<{ success: boolean; error?: string } & Partial<FetchedDesign>>(
+    "fetch_design", { design_id: designId },
+  );
+}
+
+export async function listDesigns() {
+  return callTool<{
+    success: boolean; count: number; designs: StoredDesignMeta[]; error?: string;
+  }>("list_designs", {});
+}
+
+export async function deleteDesign(designId: string) {
+  return callTool<{ success: boolean; deleted: boolean; design_id: string; error?: string }>(
+    "delete_design", { design_id: designId },
+  );
+}
+
 // ─── Artwork ─────────────────────────────────────────────────────────────
 
 export interface ArtworkField {

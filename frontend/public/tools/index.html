@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Push design — operator tool</title>
+<title>Roastify design tools</title>
 <style>
   :root{--paper:#F2F4F1;--ink:#14171A;--ink2:#3B4248;--ink3:#69737A;--rule:#C9D1CA;--dieline:#0D7C7F;--kraft:#A9713C;--surface:#FBFCFA}
   @media(prefers-color-scheme:dark){:root{--paper:#101312;--ink:#EAEEEA;--ink2:#B4BDB6;--ink3:#828D86;--rule:#2C3432;--dieline:#4FBFC0;--kraft:#C9924F;--surface:#171B1A}}
@@ -24,13 +24,48 @@
   a{color:var(--dieline)}
 </style>
 <div class="wrap">
-  <p class="eyebrow">roastify · operator tool</p>
-  <h1>Push design</h1>
-  <p class="lede">Copies one saved Roastify design onto another product. It runs on Roastify's own
-    Design Studio using your login, so it needs no dev console and works on an iPad. This is an
-    operator tool for your own account — separate from the patron Design Bench.</p>
+  <p class="eyebrow">roastify · operator tools</p>
+  <h1>Design tools</h1>
+  <p class="lede">Two tools that run inside Roastify's Design Studio on your own login — no dev
+    console, works on an iPad. The <b>courier</b> shuttles designs to and from your Design Bench;
+    <b>Push design</b> is a quick direct copy. Both are for your own operator account, separate
+    from the patron Bench.</p>
 
   <hr class="cut">
+
+  <p class="eyebrow">roastify · courier</p>
+  <h1 style="margin-top:.3rem">Design courier</h1>
+  <p class="lede">Shuttles a design between Roastify and your <b>Design Bench</b> library: send a
+    product's design up to edit it in the Bench, then bring the edited design back onto a product.
+    It logs into Roastify MCP with your npub (the standard DM proof) and never edits anything
+    itself — all redesign happens in the Bench.</p>
+
+  <h2>1 · Install the button (once)</h2>
+  <p class="lede"><b>On a Mac:</b> drag this to your bookmarks bar.</p>
+  <p><a class="bm" href="javascript:(()=&gt;{const s=document.createElement(&quot;script&quot;);s.src=&quot;https://roastify-app.pages.dev/tools/courier.js?&quot;+Date.now();s.onerror=()=&gt;alert(&quot;Could not load the courier — check your connection.&quot;);document.body.appendChild(s);})();">➤ Design courier</a></p>
+  <p class="lede"><b>On iPad:</b> add any page to Favorites, edit that bookmark, and replace its
+    address with the code below.</p>
+  <textarea readonly onclick="this.select()">javascript:(()=&gt;{const s=document.createElement(&quot;script&quot;);s.src=&quot;https://roastify-app.pages.dev/tools/courier.js?&quot;+Date.now();s.onerror=()=&gt;alert(&quot;Could not load the courier — check your connection.&quot;);document.body.appendChild(s);})();</textarea>
+
+  <h2>2 · Use it</h2>
+  <ol>
+    <li>Open <code>merchant.roastify.app</code> and sign in.</li>
+    <li>Tap <b>Design courier</b>. Log in with your npub — reply to the Nostr DM, then confirm.</li>
+    <li><b>Send this design → library</b> stashes the selected product's design for the Bench.</li>
+    <li>Edit it in the Design Bench, then come back and
+      <b>Apply library design → this product</b> to write it onto a product.</li>
+  </ol>
+
+  <div class="note"><b>Applying overwrites the selected product's design.</b> Its thumbnail keeps
+    the old preview until you open it in the Designer, which re-renders it. Use a throwaway product
+    until you trust it.</div>
+
+  <hr class="cut">
+  <p class="eyebrow">roastify · operator tool</p>
+  <h1 style="margin-top:.3rem">Push design</h1>
+  <p class="lede">The older direct tool: copies one saved design straight onto another product,
+    with in-panel font repair. Superseded by the courier + Bench flow above, but kept for a quick
+    one-off copy.</p>
 
   <h2>1 · Install the button (once)</h2>
   <p class="lede"><b>On a Mac:</b> drag this to your bookmarks bar.</p>
