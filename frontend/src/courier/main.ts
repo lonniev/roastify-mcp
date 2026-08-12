@@ -35,7 +35,14 @@ type Rec = Record<string, unknown>;
 if (location.host !== "merchant.roastify.app") {
   alert("Open this on merchant.roastify.app (signed in), then tap the bookmarklet there.");
 } else {
-  main();
+  try {
+    main();
+  } catch (e) {
+    // The courier is injected as a classic script with no console on iPad, so a
+    // throw here would be silent. Surface it.
+    const err = e as Error;
+    alert("Courier failed to open: " + (err?.message || e) + "\n\n" + String(err?.stack || "").slice(0, 400));
+  }
 }
 
 function main(): void {
