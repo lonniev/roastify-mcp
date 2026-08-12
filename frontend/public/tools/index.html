@@ -40,17 +40,72 @@
     It logs into Roastify MCP with your npub (the standard DM proof) and never edits anything
     itself — all redesign happens in the Bench.</p>
 
-  <h2>1 · Install the button (once)</h2>
-  <p class="lede"><b>On a Mac:</b> drag this to your bookmarks bar.</p>
+  <h2>1a · Install on iPad — recommended (Userscripts)</h2>
+  <p class="lede">iPad Safari can't drag a bookmarklet. The reliable path is the free, open-source
+    <b>Userscripts</b> Safari extension, which puts a small <b>☕ Courier</b> button on Roastify.</p>
+  <ol>
+    <li>App Store → install <b>Userscripts</b> (free).</li>
+    <li><b>Settings → Safari → Extensions → Userscripts</b> → turn it on; allow it on
+      <code>merchant.roastify.app</code>.</li>
+    <li>In Safari, tap the <b>extensions button</b> in the address bar → <b>Userscripts</b> →
+      open its editor → <b>+</b> new script → paste the script below → save. It's tiny and always
+      loads the latest courier, so you never reinstall it. (You can also open
+      <code>/tools/courier.user.js</code> to copy it.)</li>
+  </ol>
+  <textarea readonly onclick="this.select()" style="height:150px">// ==UserScript==
+// @name         Roastify Design Courier
+// @match        https://merchant.roastify.app/*
+// @run-at       document-idle
+// @grant        none
+// ==/UserScript==
+(function () {
+  if (window.__rcourierLauncher) return;
+  window.__rcourierLauncher = true;
+  function addButton() {
+    if (!document.body || document.getElementById("rcourier-launch")) return;
+    var b = document.createElement("button");
+    b.id = "rcourier-launch"; b.textContent = "☕ Courier";
+    b.style.cssText = "position:fixed;right:14px;bottom:14px;z-index:2147483646;background:#0d7c7f;color:#0b1211;border:0;border-radius:999px;font:700 13px ui-monospace,Menlo,monospace;padding:10px 14px;box-shadow:0 6px 20px rgba(0,0,0,.35)";
+    b.onclick = function () {
+      var s = document.createElement("script");
+      s.src = "https://roastify-app.pages.dev/tools/courier.js?" + Date.now();
+      document.body.appendChild(s);
+    };
+    document.body.appendChild(b);
+  }
+  if (document.body) addButton(); else document.addEventListener("DOMContentLoaded", addButton);
+})();</textarea>
+  <p class="lede">Then on <code>merchant.roastify.app</code>, tap the <b>☕ Courier</b> button
+    (bottom-right) to open the panel.</p>
+
+  <h2>1b · Install on iPad — alternative (Shortcut)</h2>
+  <p class="lede">No extra app, but may not persist on every iOS version — try it. Run it from the
+    Share sheet on the Roastify page.</p>
+  <ol>
+    <li>Open the <b>Shortcuts</b> app → tap <b>+</b> to create a new shortcut.</li>
+    <li>Add the action <b>Run JavaScript on Web Page</b> (search for it).</li>
+    <li>Tap into its code box and replace the contents with exactly this:</li>
+  </ol>
+  <textarea readonly onclick="this.select()">const s = document.createElement("script");
+s.src = "https://roastify-app.pages.dev/tools/courier.js?" + Date.now();
+document.body.appendChild(s);
+completion();</textarea>
+  <ol start="4">
+    <li>Open the shortcut's settings (the name/ⓘ) → turn on <b>Show in Share Sheet</b>, and set the
+      accepted input to <b>Safari web pages</b>. Name it <b>Design courier</b>. Save.</li>
+    <li>To use: in Safari on <code>merchant.roastify.app</code>, tap <b>Share</b> → <b>Design
+      courier</b>. The first time, allow it to run on the page.</li>
+  </ol>
+
+  <h2>1c · Install on a Mac (bookmarklet)</h2>
+  <p class="lede">Drag this to your bookmarks bar.</p>
   <p><a class="bm" href="javascript:(()=&gt;{const s=document.createElement(&quot;script&quot;);s.src=&quot;https://roastify-app.pages.dev/tools/courier.js?&quot;+Date.now();s.onerror=()=&gt;alert(&quot;Could not load the courier — check your connection.&quot;);document.body.appendChild(s);})();">➤ Design courier</a></p>
-  <p class="lede"><b>On iPad:</b> add any page to Favorites, edit that bookmark, and replace its
-    address with the code below.</p>
-  <textarea readonly onclick="this.select()">javascript:(()=&gt;{const s=document.createElement(&quot;script&quot;);s.src=&quot;https://roastify-app.pages.dev/tools/courier.js?&quot;+Date.now();s.onerror=()=&gt;alert(&quot;Could not load the courier — check your connection.&quot;);document.body.appendChild(s);})();</textarea>
 
   <h2>2 · Use it</h2>
   <ol>
     <li>Open <code>merchant.roastify.app</code> and sign in.</li>
-    <li>Tap <b>Design courier</b>. Log in with your npub — reply to the Nostr DM, then confirm.</li>
+    <li>Run <b>Design courier</b> (Share sheet on iPad, or the bookmark on a Mac). Log in with your
+      npub — reply to the Nostr DM, then confirm.</li>
     <li><b>Send this design → library</b> stashes the selected product's design for the Bench.</li>
     <li>Edit it in the Design Bench, then come back and
       <b>Apply library design → this product</b> to write it onto a product.</li>
