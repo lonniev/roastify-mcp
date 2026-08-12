@@ -16,10 +16,10 @@
     alert("Open this on merchant.roastify.app (signed in), then tap the bookmarklet there.");
     return;
   }
-  if (document.getElementById("rpush-host")) {
-    document.getElementById("rpush-host").style.display = "block";
-    return;
-  }
+  // Re-tap = fresh panel. Remove any prior instance and rebuild so a re-tap
+  // re-reads the product list (needed to see a design just pushed).
+  const prior = document.getElementById("rpush-host");
+  if (prior) prior.remove();
 
   // ---- tRPC (superjson, non-batched; queries GET, mutations POST) ------------
   const unwrap = async (res, path) => {
@@ -107,10 +107,11 @@
   const $ = (id) => sh.getElementById(id);
   const log = (m) => { $("log").textContent += "\n" + m; $("log").scrollTop = 1e9; };
   $("x").onclick = () => host.remove();
+  $("x").onpointerup = (e) => { e.stopPropagation(); host.remove(); };
 
   // drag
   (() => { let dx = 0, dy = 0, on = false; const p = sh.querySelector(".p"), h = $("hd");
-    h.onpointerdown = (e) => { on = true; dx = e.clientX - p.offsetLeft; dy = e.clientY - p.offsetTop; h.setPointerCapture(e.pointerId); };
+    h.onpointerdown = (e) => { if (e.target && e.target.id === "x") return; on = true; dx = e.clientX - p.offsetLeft; dy = e.clientY - p.offsetTop; h.setPointerCapture(e.pointerId); };
     h.onpointermove = (e) => { if (!on) return; p.style.left = e.clientX - dx + "px"; p.style.top = e.clientY - dy + "px"; p.style.right = "auto"; };
     h.onpointerup = () => { on = false; }; })();
 
