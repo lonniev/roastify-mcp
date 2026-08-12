@@ -35,16 +35,12 @@
       headers: { "content-type": "application/json" }, body: JSON.stringify({ json: input }) }).then((r) => unwrap(r, path));
   const rid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.floor(Math.random() * 1e9)}`);
   const STORAGE = "https://storage.roastify.app/";
-  const copyAsset = async (srcUrl, folder) => {
-    const blob = await fetch(srcUrl).then((r) => r.blob());
-    const ext = (srcUrl.split(".").pop() || "").split("?")[0].toLowerCase() || (blob.type.includes("png") ? "png" : "jpeg");
-    const ctype = blob.type || (ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/png");
-    const key = `${folder}/${rid()}.${ext}`;
-    const put = await mutate("aws.getPresignedUrl", { filename: key, filetype: ctype });
-    const r = await fetch(put, { method: "PUT", headers: { "Content-Type": ctype }, body: blob });
-    if (!r.ok) throw new Error(`copy failed: HTTP ${r.status}`);
-    return { s3Key: key, imageUrl: STORAGE + key };
-  };
+  // Reuse an existing storage URL by deriving its key. We do NOT re-download the
+  // source images to re-upload them: that is a cross-origin fetch to
+  // storage.roastify.app, which the browser blocks ("Load failed"). Pointing the
+  // target at the source's existing image objects avoids the fetch entirely and
+  // still makes the target visibly show the source's design.
+  const asset = (url) => ({ s3Key: (typeof url === "string" ? url.replace(/^https?:\/\/storage\.roastify\.app\//, "") : ""), imageUrl: url });
   const rowsOf = (r) => (Array.isArray(r) ? r : r?.products ?? r?.items ?? r?.data ?? r?.rows ?? []);
   const idOf = (p) => p.id ?? p.editProductId ?? p.productId ?? p._id;
   const mockupsOf = (p) =>
@@ -139,10 +135,9 @@
       const ju = await fetch(jput, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(design) });
       if (!ju.ok) throw new Error("json upload HTTP " + ju.status);
 
-      log("copying preview + mockups…");
-      const preview = await copyAsset(source.designImageUrl, "design-upload");
-      const imageUrls = [];
-      for (const u of mockupsOf(source)) imageUrls.push(await copyAsset(u, "mockup-images"));
+      log("using source preview + mockups…");
+      const preview = asset(source.designImageUrl);
+      const imageUrls = mockupsOf(source).map(asset);
       if (!imageUrls.length) imageUrls.push(preview);
 
       log("writing updateDesign…");
