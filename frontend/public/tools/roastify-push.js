@@ -45,7 +45,12 @@
     for (const fam of Object.keys(used)) {
       if (have.has(fam)) continue;
       const weights = [...used[fam]].sort((a, b) => a - b);
-      added.push({ family: fam, weights, url: `https://fonts.googleapis.com/css2?family=${fam.replace(/ /g, "+")}:wght@${weights.join(";")}&display=swap` });
+      // Request the plain family, NOT ":wght@<weights>". A design can mark text
+      // "bold" in a font that only ships one weight (e.g. Fjalla One has no 700):
+      // css2 then drops that family, its FontFace load rejects, and the Designer's
+      // Promise.all over all fonts rejects — blanking EVERY font, not just the one.
+      // The plain family URL always resolves, so the batch always registers.
+      added.push({ family: fam, weights, url: `https://fonts.googleapis.com/css2?family=${fam.replace(/ /g, "+")}&display=swap` });
     }
     design.fonts = [...(design.fonts || []), ...added];
     return added.length;
