@@ -28,7 +28,7 @@ from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.session_cache import SessionCache
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity
 
-from roastify_mcp import __version__, roastify
+from roastify_mcp import __version__, design_store, roastify
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,14 @@ mcp = FastMCP(
         "placeholders of a design you authored in Design Studio. It cannot "
         "author a design from scratch, and the artwork URL it returns is not "
         "attached to a product — you carry it onward yourself. Rendering is asynchronous: `roastify_generate_artwork` hands back a job id and `roastify_artwork_status` checks it, free.\n\n"
+        "## Design library (bring your own designs)\n"
+        "The operator can hold your saved Roastify designs for you, keyed to "
+        "your npub: `roastify_stash_design` stores one, `roastify_list_designs` "
+        "lists them, `roastify_fetch_design` returns one, `roastify_delete_design` "
+        "removes one. This is storage only — the operator never writes a design "
+        "onto a Roastify product (that needs your Merchant App session and is "
+        "done by the browser courier). Use it to keep a branded template you "
+        "edit in the Design Bench and shuttle back onto your products.\n\n"
         "## Pricing\n"
         "Tool prices are set dynamically by the operator's pricing model. Use "
         "`roastify_check_price` to preview costs and `roastify_check_balance` "
@@ -86,6 +94,10 @@ GET_MY_PRODUCT_UUID      = "67fbe1e5-0bc4-59cd-a2ed-2b32965f9c90"
 CHECK_STOCK_UUID         = "a145146f-f0d5-59c7-9d30-8365d800c09f"
 GENERATE_ARTWORK_UUID    = "eba5986f-659c-58c2-b269-ce7a5c4b51fe"
 ARTWORK_STATUS_UUID      = "d2fc68a3-95bd-5345-8e1c-9f8230db791c"
+STASH_DESIGN_UUID        = "93564249-f06f-5be2-bea6-d9ce2a5b3a51"
+FETCH_DESIGN_UUID        = "b2635db7-064b-5751-9b7f-dcabe176bc19"
+LIST_DESIGNS_UUID        = "9bcfb147-3bfb-58dd-98f7-bdc1d83f5d4c"
+DELETE_DESIGN_UUID       = "45014cff-c156-5f3e-bfea-dfb9131340d9"
 
 _DOMAIN_TOOLS = [
     ToolIdentity(
@@ -121,6 +133,25 @@ _DOMAIN_TOOLS = [
     ToolIdentity(
         tool_id=ARTWORK_STATUS_UUID, capability="artwork_status", category="free",
         intent="Check a Roastify artwork job",
+    ),
+    # Design library — the patron's own designs, held in the operator's Neon.
+    # Storage only: none of these call Roastify. Writing a design onto a product
+    # needs the merchant session and is done by the browser courier, not here.
+    ToolIdentity(
+        tool_id=STASH_DESIGN_UUID, capability="stash_design", category="write",
+        intent="Store a Roastify design JSON in the patron's library",
+    ),
+    ToolIdentity(
+        tool_id=FETCH_DESIGN_UUID, capability="fetch_design", category="read",
+        intent="Fetch one stored design from the patron's library",
+    ),
+    ToolIdentity(
+        tool_id=LIST_DESIGNS_UUID, capability="list_designs", category="read",
+        intent="List the patron's stored designs",
+    ),
+    ToolIdentity(
+        tool_id=DELETE_DESIGN_UUID, capability="delete_design", category="write",
+        intent="Delete one stored design from the patron's library",
     ),
 ]
 
@@ -462,6 +493,131 @@ async def artwork_status(job_id: str, npub: _NPUB = "",
     if result.get("success") is False:
         return result
     return {"success": True, **result}
+
+
+# ---------------------------------------------------------------------------
+# Design library — the patron's own designs, stored in the operator's Neon.
+#
+# Storage only. None of these tools call Roastify: the browser courier reads a
+# product's design (merchant session) and stashes it here; the Design Bench
+# edits it; the courier fetches it back and writes it onto a product. The
+# operator never holds a merchant session and never mutates Roastify.
+# ---------------------------------------------------------------------------
+
+
+async def _run_library(op: Any) -> dict[str, Any]:
+    """Run a design-library op against the operator vault, naming failures.
+
+    A cold or quota-blocked vault becomes a structured situation rather than a
+    stack trace; the patron's stored designs are never at risk from a read that
+    could not run.
+    """
+    from tollbooth.persistence_errors import classify_persistence_failure
+
+    try:
+        vault = await runtime.vault()
+        return await op(vault)
+    except Exception as exc:  # noqa: BLE001
+        situation = classify_persistence_failure(exc)
+        logger.warning("design library op failed (%s): %s", situation, exc)
+        return {
+            "success": False,
+            "situation": situation or "library_unavailable",
+            "error": (
+                "The design library is temporarily unavailable; your stored "
+                "designs are unaffected. Retry shortly."
+            ),
+        }
+
+
+@tool
+@runtime.paid_tool(STASH_DESIGN_UUID)
+async def stash_design(
+    design: dict[str, Any],
+    label: str = "",
+    product_id: str = "",
+    source_title: str = "",
+    design_id: str = "",
+    npub: _NPUB = "",
+    dpop_token: str = "",
+) -> dict[str, Any]:
+    """Store a Roastify design JSON in your library, keyed to your npub.
+
+    The browser courier reads a saved product's design and calls this to shuttle
+    it up; the Design Bench then edits it. Inline images are de-duplicated, so
+    variations of one design cost little. This does NOT touch Roastify.
+
+    Args:
+        design: The full Roastify design JSON object (elements/faceBackgrounds…).
+        label: Your name for this design, e.g. "Ethiopian — light".
+        product_id: The Roastify product id it came from, for your reference.
+        source_title: The product's title at stash time, for your reference.
+        design_id: Omit to store a new design; pass an existing id to overwrite
+            that slot.
+    """
+    if not isinstance(design, dict) or not design:
+        return {"success": False, "error": "design must be a non-empty JSON object"}
+
+    async def op(vault: Any) -> dict[str, Any]:
+        meta = await design_store.put_design(
+            vault, npub, design, design_id=design_id, label=label,
+            product_id=product_id, source_title=source_title,
+        )
+        return {"success": True, **meta}
+
+    return await _run_library(op)
+
+
+@tool
+@runtime.paid_tool(FETCH_DESIGN_UUID)
+async def fetch_design(design_id: str, npub: _NPUB = "",
+                       dpop_token: str = "") -> dict[str, Any]:
+    """Fetch one of your stored designs in full, with its images re-inlined.
+
+    Args:
+        design_id: The id from roastify_stash_design or roastify_list_designs.
+    """
+    if not design_id:
+        return {"success": False, "error": "design_id is required"}
+
+    async def op(vault: Any) -> dict[str, Any]:
+        found = await design_store.get_design(vault, npub, design_id)
+        if found is None:
+            return {"success": False, "error": f"no design '{design_id}' in your library"}
+        return {"success": True, **found}
+
+    return await _run_library(op)
+
+
+@tool
+@runtime.paid_tool(LIST_DESIGNS_UUID)
+async def list_designs(npub: _NPUB = "", dpop_token: str = "") -> dict[str, Any]:
+    """List your stored designs — metadata only, newest first."""
+
+    async def op(vault: Any) -> dict[str, Any]:
+        designs = await design_store.list_designs(vault, npub)
+        return {"success": True, "count": len(designs), "designs": designs}
+
+    return await _run_library(op)
+
+
+@tool
+@runtime.paid_tool(DELETE_DESIGN_UUID)
+async def delete_design(design_id: str, npub: _NPUB = "",
+                        dpop_token: str = "") -> dict[str, Any]:
+    """Delete one of your stored designs.
+
+    Args:
+        design_id: The id from roastify_list_designs.
+    """
+    if not design_id:
+        return {"success": False, "error": "design_id is required"}
+
+    async def op(vault: Any) -> dict[str, Any]:
+        removed = await design_store.delete_design(vault, npub, design_id)
+        return {"success": removed, "deleted": removed, "design_id": design_id}
+
+    return await _run_library(op)
 
 
 # ---------------------------------------------------------------------------

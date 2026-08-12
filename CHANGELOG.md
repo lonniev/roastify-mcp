@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Design library** — four npub-scoped tools (`stash_design`, `fetch_design`, `list_designs`,
+  `delete_design`) that hold a patron's own Roastify designs in the operator's Neon, gated by
+  the standard npub-proof like every other patron tool. This is the store half of the
+  design-shuttle: the browser courier reads a product's design (merchant session) and stashes
+  it here; the Design Bench edits it; the courier fetches it back to write onto a product. The
+  operator never holds a merchant session and never mutates Roastify — storage only. A saved
+  design is ~2.3 MB but 99 % of that is one inline image, so inline `data:` URIs are lifted
+  into a content-addressed, chunked assets table (deduped by sha256) and the design row keeps
+  only an ~18 KB skeleton; a patron's variations of one design reuse the image for free.
+  Persistence reuses the SDK's bootstrapped `NeonVault` (`_execute`/`_t`), the same idiom as
+  the SDK's own `adoption_store`.
+
+
 - `frontend/public/tools/` — an **operator-only** design-push tool, deployed alongside the FE
   but deliberately not part of the patron Design Bench. Roastify's Design Studio talks a
   private tRPC API (`/api/trpc`) authenticated by a Clerk session cookie, not the public API
