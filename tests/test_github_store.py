@@ -12,7 +12,9 @@ import base64
 import json
 from typing import Any
 
+import httpx
 import pytest
+import respx
 
 from roastify_mcp import github_store as gs
 
@@ -78,6 +80,70 @@ def test_from_spec_parses_repo_forms(spec, owner, repo):
 def test_from_spec_rejects_bad_repo():
     with pytest.raises(gs.GitHubError):
         gs.GitHubStore.from_spec("tok", "not-a-repo")
+
+
+# ---------------------------------------------------------------------------
+# font repair — undo Roastify's lossy migration
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("v,n", [("bold", 700), ("normal", 400), (700, 700), ("300", 300), (None, 400), ("weird", 400)])
+def test_weight_num(v, n):
+    assert gs._weight_num(v) == n
+
+
+def test_used_fonts_collects_families_and_weights():
+    d = {"elements": [
+        {"type": "text", "id": "a", "fontFamily": "Montserrat", "fontWeight": "bold", "text": "X"},
+        {"type": "text", "id": "b", "fontFamily": "Montserrat", "fontWeight": "normal", "text": "Y"},
+        {"type": "text", "id": "c", "fontFamily": "Roboto", "text": "Z"},
+        {"type": "image", "id": "i", "src": "x"},
+    ]}
+    used = gs.used_fonts(d)
+    assert used["Montserrat"] == {400, 700}
+    assert used["Roboto"] == {400}
+    assert "i" not in used
+
+
+_FONTY = {
+    "elements": [
+        {"type": "text", "id": "a", "fontFamily": "Montserrat", "fontWeight": "bold", "text": "Bold"},
+        {"type": "text", "id": "b", "fontFamily": "Montserrat", "fontWeight": "normal", "text": "Reg"},
+        {"type": "text", "id": "c", "fontFamily": "Fjalla One", "fontWeight": "bold", "text": "Head"},
+        {"type": "text", "id": "d", "fontFamily": "Roboto", "fontWeight": "normal", "text": "Body"},
+    ],
+    "fonts": [{"family": "STALE"}],  # the damaged list Roastify's migration left
+}
+
+
+@respx.mock
+async def test_repair_fonts_rebuilds_with_resolvable_urls():
+    # Google keeps Montserrat's weights but drops Fjalla One's (it has no 700).
+    def side_effect(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        return httpx.Response(200, text="dropped" if "Fjalla" in url else "@font-face Montserrat")
+    respx.get(url__regex=r"fonts\.googleapis\.com").mock(side_effect=side_effect)
+
+    d = json.loads(json.dumps(_FONTY))
+    fonts = await gs.repair_fonts(d)
+    by = {f["family"]: f for f in fonts}
+    assert set(by) == {"Montserrat", "Fjalla One", "Roboto"}
+    assert by["Montserrat"]["url"].endswith(":wght@400;700&display=swap")   # valid weights kept
+    assert ":wght@" not in by["Fjalla One"]["url"]                          # invalid weight → plain family
+    assert ":wght@" not in by["Roboto"]["url"]                             # single 400 → plain, no fetch
+    # non-destructive: the stale fonts[] is replaced, but text + fontFamily untouched
+    assert d["fonts"] == fonts
+    assert d["elements"][0]["fontFamily"] == "Montserrat" and d["elements"][0]["text"] == "Bold"
+
+
+async def test_put_with_repair_rebuilds_fonts_and_reports_them():
+    r = FakeGitHubStore()
+    # DESIGN's one text layer is Poppins at the default (400) weight, so repair
+    # needs no network (single-400 → plain family). Copy — repair mutates fonts[].
+    meta = await r.put_design(json.loads(json.dumps(DESIGN)), label="e", repair=True)
+    assert meta["fonts_repaired"] == ["Poppins"]
+    stored = json.loads(r.files[f"designs/{meta['design_id']}/design.json"])
+    assert [f["family"] for f in stored["fonts"]] == ["Poppins"]
 
 
 # ---------------------------------------------------------------------------

@@ -639,11 +639,15 @@ async def stash_design(
     npub: _NPUB = "",
     dpop_token: str = "",
 ) -> dict[str, Any]:
-    """Store a Roastify design JSON in your library, keyed to your npub.
+    """Store a Roastify design JSON in your library (a commit in your GitHub repo).
 
-    The browser courier reads a saved product's design and calls this to shuttle
-    it up; the Design Bench then edits it. Inline images are de-duplicated, so
-    variations of one design cost little. This does NOT touch Roastify.
+    The browser courier reads a saved product's design and calls this to shuttle it
+    up. On the way in, the design's fonts[] is REPAIRED — Roastify's own schema
+    migration leaves a lossy fonts[] (a dropped family, a bad weight), so a stashed
+    design would otherwise carry that damage; the repair rebuilds fonts[] from the
+    families the text actually uses so it renders in its intended fonts. Only the
+    load list changes; the text and its fonts are untouched. Inline images are
+    de-duplicated. This does NOT touch Roastify.
 
     Args:
         design: The full Roastify design JSON object (elements/faceBackgrounds…).
@@ -659,7 +663,7 @@ async def stash_design(
     async def op(store: github_store.GitHubStore) -> dict[str, Any]:
         meta = await store.put_design(
             design, design_id=design_id, label=label,
-            product_id=product_id, source_title=source_title,
+            product_id=product_id, source_title=source_title, repair=True,
         )
         return {"success": True, **meta}
 
