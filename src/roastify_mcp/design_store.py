@@ -188,8 +188,13 @@ async def put_design(
     }
 
 
-async def get_design(vault: Any, npub: str, design_id: str) -> dict[str, Any] | None:
-    """Fetch one design for ``npub``, fully re-inlined, or None if absent."""
+async def get_skeleton(vault: Any, npub: str, design_id: str) -> dict[str, Any] | None:
+    """Return the stored skeleton (text + ``asset://`` markers, images NOT inlined).
+
+    Light — never loads the megabyte image chunks. This is what editing works on:
+    the text layers live in the skeleton; the images are separate content-addressed
+    assets that ``get_design`` re-inlines only when a full design is needed.
+    """
     await ensure_schema(vault)
     result = await vault._execute(
         f"SELECT label, product_id, source_title, skeleton, bytes, updated_at "
@@ -200,13 +205,6 @@ async def get_design(vault: Any, npub: str, design_id: str) -> dict[str, Any] | 
     if not rows:
         return None
     row = rows[0]
-    skeleton = json.loads(row["skeleton"])
-    digests = set(_ASSET_REF.findall(row["skeleton"]))
-    resolved: dict[str, str] = {}
-    for digest in digests:
-        uri = await _load_asset(vault, digest)
-        if uri is not None:
-            resolved[digest] = uri
     return {
         "design_id": design_id,
         "label": row["label"],
@@ -214,8 +212,88 @@ async def get_design(vault: Any, npub: str, design_id: str) -> dict[str, Any] | 
         "source_title": row["source_title"],
         "bytes": row["bytes"],
         "updated_at": str(row["updated_at"]),
+        "skeleton": json.loads(row["skeleton"]),
+    }
+
+
+async def get_design(vault: Any, npub: str, design_id: str) -> dict[str, Any] | None:
+    """Fetch one design for ``npub``, fully re-inlined, or None if absent."""
+    found = await get_skeleton(vault, npub, design_id)
+    if found is None:
+        return None
+    skeleton = found["skeleton"]
+    digests = set(_ASSET_REF.findall(json.dumps(skeleton)))
+    resolved: dict[str, str] = {}
+    for digest in digests:
+        uri = await _load_asset(vault, digest)
+        if uri is not None:
+            resolved[digest] = uri
+    return {
+        "design_id": found["design_id"],
+        "label": found["label"],
+        "product_id": found["product_id"],
+        "source_title": found["source_title"],
+        "bytes": found["bytes"],
+        "updated_at": found["updated_at"],
         "design": _inline(skeleton, resolved),
     }
+
+
+# ---------------------------------------------------------------------------
+# text-layer read / edit (pure) — the field surface for Claude-orchestrated edits
+# ---------------------------------------------------------------------------
+
+
+def text_layers(design: Any) -> list[dict[str, Any]]:
+    """List every text layer as {id, text, fontFamily, fontWeight, face}.
+
+    Each layer's own current text is its label — infer its role (title, quote,
+    recipe…) from that; the design is the schema, nothing is hardcoded.
+    """
+    out: list[dict[str, Any]] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "text" and node.get("id"):
+                out.append({
+                    "id": node["id"],
+                    "text": node.get("text", ""),
+                    "fontFamily": node.get("fontFamily"),
+                    "fontWeight": node.get("fontWeight"),
+                    "face": node.get("faceId") or node.get("face"),
+                })
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(design)
+    return out
+
+
+def apply_text_edits(design: Any, edits: dict[str, str]) -> int:
+    """Set ``.text`` on each text layer whose id is a key in ``edits`` (mutates).
+
+    Returns the number of layers changed. Fonts, geometry, and images are left
+    exactly as they were — only the words change.
+    """
+    changed = 0
+
+    def walk(node: Any) -> None:
+        nonlocal changed
+        if isinstance(node, dict):
+            if node.get("type") == "text" and node.get("id") in edits:
+                node["text"] = edits[node["id"]]
+                changed += 1
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(design)
+    return changed
 
 
 async def list_designs(vault: Any, npub: str) -> list[dict[str, Any]]:

@@ -72,7 +72,16 @@ mcp = FastMCP(
         "removes one. This is storage only — the operator never writes a design "
         "onto a Roastify product (that needs your Merchant App session and is "
         "done by the browser courier). Use it to keep a branded template you "
-        "edit in the Design Bench and shuttle back onto your products.\n\n"
+        "shuttle back onto your products.\n\n"
+        "## Generate a branded variant in chat\n"
+        "To spin a new product from a saved design without moving megabytes of "
+        "artwork: call `roastify_get_design_text` to see the design's editable "
+        "text layers (id + current text + font — no images), interview the patron "
+        "or read a catalog item (`roastify_get_catalog_product`) for the facts, "
+        "then call `roastify_update_design_text(design_id, edits={layer_id: text})` "
+        "to save a new, text-edited design. The patron applies that new design onto "
+        "the new product with the browser courier. The original is never changed and "
+        "the image never leaves the library.\n\n"
         "## Pricing\n"
         "Tool prices are set dynamically by the operator's pricing model. Use "
         "`roastify_check_price` to preview costs and `roastify_check_balance` "
@@ -98,6 +107,8 @@ STASH_DESIGN_UUID        = "93564249-f06f-5be2-bea6-d9ce2a5b3a51"
 FETCH_DESIGN_UUID        = "b2635db7-064b-5751-9b7f-dcabe176bc19"
 LIST_DESIGNS_UUID        = "9bcfb147-3bfb-58dd-98f7-bdc1d83f5d4c"
 DELETE_DESIGN_UUID       = "45014cff-c156-5f3e-bfea-dfb9131340d9"
+GET_DESIGN_TEXT_UUID     = "2569b7b5-a380-59fa-a60b-32c3666c1e1b"
+UPDATE_DESIGN_TEXT_UUID  = "0acef2a3-c54a-5134-a30b-9a15e01b98d5"
 
 _DOMAIN_TOOLS = [
     ToolIdentity(
@@ -152,6 +163,16 @@ _DOMAIN_TOOLS = [
     ToolIdentity(
         tool_id=DELETE_DESIGN_UUID, capability="delete_design", category="write",
         intent="Delete one stored design from the patron's library",
+    ),
+    # Field-level editing — read the text layers, write a text-edited variant.
+    # Small on the wire (no images), so an agent can drive product copy in chat.
+    ToolIdentity(
+        tool_id=GET_DESIGN_TEXT_UUID, capability="get_design_text", category="read",
+        intent="List the editable text layers of a stored design",
+    ),
+    ToolIdentity(
+        tool_id=UPDATE_DESIGN_TEXT_UUID, capability="update_design_text", category="write",
+        intent="Save a text-edited copy of a stored design as a new design",
     ),
 ]
 
@@ -616,6 +637,101 @@ async def delete_design(design_id: str, npub: _NPUB = "",
     async def op(vault: Any) -> dict[str, Any]:
         removed = await design_store.delete_design(vault, npub, design_id)
         return {"success": removed, "deleted": removed, "design_id": design_id}
+
+    return await _run_library(op)
+
+
+@tool
+@runtime.paid_tool(GET_DESIGN_TEXT_UUID)
+async def get_design_text(design_id: str, npub: _NPUB = "",
+                          dpop_token: str = "") -> dict[str, Any]:
+    """List the editable text layers of a stored design — the fields you can change.
+
+    Returns each text layer's id, its current text, and its font — but NOT the
+    design's images, so it stays small enough to reason over in a conversation.
+    Each layer's current text is its own label: infer its role (product name,
+    tagline, story, recipe, tasting notes, …) from the words it holds. The same
+    name often appears in several layers and inside longer blurbs; change every id
+    that should carry it.
+
+    Pair with roastify_update_design_text to save your changes.
+
+    Args:
+        design_id: The id from roastify_list_designs.
+    """
+    if not design_id:
+        return {"success": False, "error": "design_id is required"}
+
+    async def op(vault: Any) -> dict[str, Any]:
+        found = await design_store.get_skeleton(vault, npub, design_id)
+        if found is None:
+            return {"success": False, "error": f"no design '{design_id}' in your library"}
+        layers = design_store.text_layers(found["skeleton"])
+        return {
+            "success": True,
+            "design_id": design_id,
+            "label": found["label"],
+            "product_id": found["product_id"],
+            "count": len(layers),
+            "layers": layers,
+        }
+
+    return await _run_library(op)
+
+
+@tool
+@runtime.paid_tool(UPDATE_DESIGN_TEXT_UUID)
+async def update_design_text(
+    design_id: str,
+    edits: dict[str, str],
+    label: str = "",
+    npub: _NPUB = "",
+    dpop_token: str = "",
+) -> dict[str, Any]:
+    """Apply text edits to a stored design and save the result as a NEW design.
+
+    The original is left untouched; a new design_id is returned, which you (or the
+    patron) then apply onto a product with the browser courier. Only the words
+    change — fonts, layout, and images are preserved, and the heavy image is never
+    moved (the new design references the same content-addressed assets).
+
+    Args:
+        design_id: The design to edit, from roastify_list_designs.
+        edits: A map of {layer_id: new_text}, using ids from roastify_get_design_text.
+            Include every layer that should change, including ones that repeat a
+            value or embed it in a longer blurb.
+        label: A name for the new design, e.g. "Ethiopian SO — light". Defaults to
+            the source label with " (edited)".
+    """
+    if not design_id:
+        return {"success": False, "error": "design_id is required"}
+    edit_map = {str(k): str(v) for k, v in (edits or {}).items()}
+    if not edit_map:
+        return {"success": False, "error": "edits must be a non-empty {layer_id: new_text} map"}
+
+    async def op(vault: Any) -> dict[str, Any]:
+        found = await design_store.get_skeleton(vault, npub, design_id)
+        if found is None:
+            return {"success": False, "error": f"no design '{design_id}' in your library"}
+        skeleton = found["skeleton"]
+        changed = design_store.apply_text_edits(skeleton, edit_map)
+        if changed == 0:
+            return {
+                "success": False,
+                "error": "none of those layer ids matched; call roastify_get_design_text for valid ids",
+            }
+        meta = await design_store.put_design(
+            vault, npub, skeleton,
+            label=label or f"{found['label']} (edited)",
+            product_id=found["product_id"], source_title=found["source_title"],
+        )
+        return {
+            "success": True,
+            "design_id": meta["design_id"],
+            "label": meta["label"],
+            "from_design_id": design_id,
+            "layers_changed": changed,
+        }
 
     return await _run_library(op)
 

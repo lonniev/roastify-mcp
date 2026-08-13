@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Field-level design editing** — two npub-scoped tools that let an agent generate a branded
+  product variant in conversation without moving the artwork. `get_design_text(design_id)` returns
+  a stored design's text layers only (id + current text + font, no images), so it stays small
+  enough to reason over in chat; each layer's own text is its label. `update_design_text(design_id,
+  edits={layer_id: text}, label)` applies the edits and saves the result as a NEW design (the
+  original is untouched), returning the new id for the browser courier to apply onto a product.
+  Only the words change — fonts, layout, and the content-addressed image are preserved and never
+  moved. The full flow: courier stashes your product's design → in Claude (Roastify MCP connected)
+  you say "make an Ethiopian SO from this", Claude reads the fields + a catalog item, interviews
+  you, and writes the variant → courier applies it onto the new product.
+
+### Added
+
 - **Design library** — four npub-scoped tools (`stash_design`, `fetch_design`, `list_designs`,
   `delete_design`) that hold a patron's own Roastify designs in the operator's Neon, gated by
   the standard npub-proof like every other patron tool. This is the store half of the
