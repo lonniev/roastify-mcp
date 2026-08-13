@@ -29,6 +29,7 @@ always receives a complete, pushable design.
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import json
 import re
@@ -151,6 +152,90 @@ def apply_text_edits(design: Any, edits: dict[str, str]) -> int:
 
     walk(design)
     return changed
+
+
+# ---------------------------------------------------------------------------
+# font repair — undo Roastify's lossy schema migration on the way in
+# ---------------------------------------------------------------------------
+
+_WEIGHT_NAMES = {"bold": 700, "bolder": 700, "normal": 400, "regular": 400, "lighter": 300}
+
+
+def _weight_num(v: Any) -> int:
+    if isinstance(v, (int, float)):
+        return int(v)
+    s = str(v or "").strip().lower()
+    if s in _WEIGHT_NAMES:
+        return _WEIGHT_NAMES[s]
+    try:
+        return int(s)
+    except ValueError:
+        return 400
+
+
+def used_fonts(design: Any) -> dict[str, set[int]]:
+    """Map each fontFamily the text uses to the set of weights it needs."""
+    used: dict[str, set[int]] = {}
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "text" and node.get("fontFamily"):
+                used.setdefault(node["fontFamily"], set()).add(_weight_num(node.get("fontWeight")))
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(design)
+    return used
+
+
+def _css2(family: str, weights: list[int] | None) -> str:
+    fam = family.replace(" ", "+")
+    if weights:
+        return f"https://fonts.googleapis.com/css2?family={fam}:wght@{';'.join(map(str, weights))}&display=swap"
+    return f"https://fonts.googleapis.com/css2?family={fam}&display=swap"
+
+
+async def _resolvable_url(client: httpx.AsyncClient, family: str, weights: list[int]) -> str:
+    """A css2 URL that actually loads: the ``:wght@`` form if Google keeps the
+    family, else the plain family (which always resolves; a missing weight then
+    faux-bolds instead of 404-ing the whole batch)."""
+    w = sorted(set(weights))
+    if w == [400]:
+        return _css2(family, None)
+    with contextlib.suppress(Exception):
+        r = await client.get(_css2(family, w), timeout=8)
+        if r.status_code == 200 and family.lower() in r.text.lower():
+            return _css2(family, w)
+    return _css2(family, None)
+
+
+async def repair_fonts(design: dict[str, Any]) -> list[dict[str, Any]]:
+    """Rebuild ``design['fonts']`` from the families the text actually uses.
+
+    Roastify's own schema migration leaves a lossy ``fonts[]`` — a dropped family,
+    a weight a font does not ship — so the migrated design renders fallback fonts in
+    Edit Design. This rebuilds the list from scratch, keyed ``family`` (the shape
+    Roastify's saved designs use) with css2 URLs validated against Google Fonts, so
+    every family the text references actually loads.
+
+    Non-destructive: only the ``fonts[]`` load list changes; the text and each
+    layer's fontFamily/fontWeight are untouched, so the intended fonts are preserved.
+    Mutates ``design`` and returns the new fonts list.
+    """
+    used = used_fonts(design)
+    if not used:
+        return design.get("fonts", [])
+    fonts: list[dict[str, Any]] = []
+    async with httpx.AsyncClient() as client:
+        for family in used:
+            weights = sorted(used[family])
+            url = await _resolvable_url(client, family, weights)
+            fonts.append({"family": family, "weights": weights, "url": url})
+    design["fonts"] = fonts
+    return fonts
 
 
 def externalize(design: Any) -> tuple[Any, dict[str, bytes]]:
@@ -300,8 +385,13 @@ class GitHubStore:
     # -- design operations ---------------------------------------------------
 
     async def put_design(self, design: dict[str, Any], *, design_id: str = "", label: str = "",
-                         product_id: str = "", source_title: str = "") -> dict[str, Any]:
+                         product_id: str = "", source_title: str = "",
+                         repair: bool = False) -> dict[str, Any]:
         did = design_id or f"{_slug(label or source_title)}-{uuid.uuid4().hex[:6]}"
+        # Repair the lossy fonts[] Roastify's schema migration leaves behind, so
+        # the stored design renders in its intended fonts (idempotent for a design
+        # that is already correct).
+        repaired = await repair_fonts(design) if repair else None
         skeleton, assets = externalize(design)
         meta = {
             "design_id": did, "label": label, "product_id": product_id,
@@ -320,7 +410,8 @@ class GitHubStore:
                     writes[f"assets/{name}"] = raw
             await self._commit(client, f"design: save {label or did}", writes, [])
         return {"design_id": did, "label": label, "product_id": product_id,
-                "source_title": source_title, "assets": len(assets)}
+                "source_title": source_title, "assets": len(assets),
+                "fonts_repaired": [f["family"] for f in repaired] if repaired is not None else None}
 
     async def get_skeleton(self, design_id: str) -> dict[str, Any] | None:
         async with httpx.AsyncClient(timeout=60) as client:
