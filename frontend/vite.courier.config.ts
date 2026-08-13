@@ -16,6 +16,11 @@ export default defineConfig({
   publicDir: false,
   define: {
     "import.meta.env.VITE_MCP_URL": JSON.stringify(MCP_PROXY),
+    // Dependencies (MCP SDK, ajv, …) read process.env.NODE_ENV at module init.
+    // This lib build has no React plugin to replace it, so without this `process`
+    // is undefined in the browser and the whole bundle throws before our code
+    // runs (script loads, but nothing executes). Replace the checks…
+    "process.env.NODE_ENV": JSON.stringify("production"),
   },
   build: {
     outDir: "dist/tools",
@@ -25,6 +30,14 @@ export default defineConfig({
       formats: ["iife"],
       name: "RoastifyCourier",
       fileName: () => "courier.js",
+    },
+    rollupOptions: {
+      output: {
+        // …and shim a process object as a backstop for any other bare `process`
+        // access (e.g. process.emit in a dep's error path) so init never throws.
+        banner:
+          "window.process=window.process||{env:{NODE_ENV:'production'},emit:function(){},version:''};",
+      },
     },
   },
 });

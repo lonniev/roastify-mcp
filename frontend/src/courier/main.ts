@@ -46,7 +46,6 @@ if (location.host !== "merchant.roastify.app") {
 }
 
 function main(): void {
-  alert("courier: main() start");
   const prior = document.getElementById("rcourier-host");
   if (prior) prior.remove();
 
@@ -342,14 +341,4 @@ function main(): void {
     log("logged in. Loading your products and library…");
     void Promise.all([loadProducts(), loadLibrary()]);
   }
-
-  // TEMP diagnostic: report the panel's actual DOM/geometry so an invisible
-  // panel can be told apart from an un-created one on a device with no console.
-  const dh = document.getElementById("rcourier-host");
-  const dp = dh && dh.shadowRoot ? (dh.shadowRoot.querySelector(".p") as HTMLElement | null) : null;
-  const dr = dp ? dp.getBoundingClientRect() : null;
-  alert(
-    "courier: main() end — host:" + !!dh + " shadow:" + !!(dh && dh.shadowRoot) + " panel:" + !!dp +
-    " rect:" + (dr ? Math.round(dr.width) + "x" + Math.round(dr.height) + "@" + Math.round(dr.left) + "," + Math.round(dr.top) : "none"),
-  );
 }
