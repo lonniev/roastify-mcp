@@ -78,6 +78,45 @@ def test_sheet_size():
     assert gs.sheet_size({}) == {"width": None, "height": None}
 
 
+# ---------------------------------------------------------------------------
+# element creation
+# ---------------------------------------------------------------------------
+
+
+def test_estimate_text_height_tracks_lines():
+    one = gs.estimate_text_height("hi", 100, 10_000)          # fits one line
+    assert one == round(100 * 1.21)
+    three = gs.estimate_text_height("a\nb\nc", 50, 10_000)     # explicit newlines
+    assert three == round(3 * 50 * 1.21)
+
+
+def test_build_text_element_inherits_style():
+    d = json.loads(json.dumps(DESIGN))
+    el, err = gs.build_text_element(d, text="New copy", style_from="t1",
+                                    x=3100, y=1200, width=700, new_id="add-x")
+    assert err == "" and el is not None
+    assert el["fontFamily"] == "Poppins" and el["fontSize"] == 63   # inherited from t1
+    assert (el["x"], el["y"], el["width"], el["id"]) == (3100, 1200, 700, "add-x")
+    assert el["height"] > 0
+
+
+def test_build_text_element_rejects_bad_style_from():
+    d = json.loads(json.dumps(DESIGN))
+    el, err = gs.build_text_element(d, text="x", style_from="bg", x=0, y=0, width=100, new_id="a")
+    assert el is None and "not text" in err                  # bg is an image
+    el2, err2 = gs.build_text_element(d, text="x", style_from="nope", x=0, y=0, width=100, new_id="a")
+    assert el2 is None and "not found" in err2
+
+
+def test_first_collision_skips_background_flags_content():
+    d = json.loads(json.dumps(DESIGN))
+    # bg is the full-sheet image → ignored; sc is the small roast-scale shape (100,200,300,40).
+    over_scale = {"id": "new", "x": 150, "y": 210, "width": 50, "height": 20}
+    assert gs.first_collision(over_scale, d) == "sc"
+    clear = {"id": "new", "x": 3200, "y": 1200, "width": 400, "height": 300}   # empty right area
+    assert gs.first_collision(clear, d) is None
+
+
 def test_apply_text_edits_changes_only_named_layers():
     d = json.loads(json.dumps(DESIGN))
     assert gs.apply_text_edits(d, {"t1": "Colombia", "nope": "x"}) == 1

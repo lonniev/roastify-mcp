@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Element creation + panel geometry (Phases 2–3 of Scout's Design-Shuttle task).**
+  `get_design_text` now assigns a real `face` per layer/element (front/back/left/right) and returns
+  `panels` — the box's panel columns recovered from the catalog dieline's `SIDE_LABELS` guide group
+  (the saved design only ever says `"sheet"`; there are no panel rectangles in it). New
+  `roastify_add_design_element(design_id, face, text, style_from, position, width)` adds a text
+  element to a design and saves the result as a NEW design (source untouched), returning the new
+  design id AND element id. Typography is inherited from an existing layer (`style_from`), position
+  is absolute `{x,y}` or relative `{below|above|rightOf|leftOf: layer_id, gap}`, and predicted bounds
+  come from the read payload's ~1.21·fontSize rule. Placement is REFUSED, not warned: it must fall
+  inside the named panel (a conservative default margin, since the dieline has no real safe area —
+  `bleed` is 0) and must not overlap an existing element (full-bleed background art excluded; the
+  collider's id is named). New `dieline` module fetches+parses the (public) dieline, cached.
+  Verified against the real Marginalism box: a 250-char origin paragraph lands in the empty right
+  panel, inside the safe box, with no collision.
+
+### Added
+
 - **Read-side geometry + non-text elements in `get_design_text`** (Phase 1 of element creation).
   Each text layer now reports `x`/`y` (top-left corner in design units; the sheet origin is its
   top-left) alongside the existing `width`/`height` (measured text bounds, not fixed frames — text

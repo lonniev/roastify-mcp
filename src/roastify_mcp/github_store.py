@@ -134,6 +134,113 @@ def sheet_size(design: Any) -> dict[str, Any]:
     return {"width": s.get("width"), "height": s.get("height")}
 
 
+# ---------------------------------------------------------------------------
+# element creation — build, place, and validate a new text element (Phase 3)
+# ---------------------------------------------------------------------------
+
+
+def find_element(design: Any, element_id: str) -> dict[str, Any] | None:
+    """Return the element with ``element_id`` (text or not), or None."""
+    found: list[dict[str, Any]] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("id") == element_id and node.get("type"):
+                found.append(node)
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(design)
+    return found[0] if found else None
+
+
+def _bounded_elements(design: Any) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("type") and node.get("id") is not None and all(
+                isinstance(node.get(k), (int, float)) for k in ("x", "y", "width", "height")
+            ):
+                out.append(node)
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(design)
+    return out
+
+
+def estimate_text_height(text: str, font_size: float, width: float) -> int:
+    """Predict a text box's height from its content, font size, and wrap width.
+
+    Uses the ratio the read payload reflects (~1.21·fontSize per line) and a
+    rough half-em average character width to estimate wrap. Approximate — the
+    Designer re-measures exactly on open — but good enough to validate placement.
+    """
+    per_line = max(1, int(width / max(1.0, font_size * 0.5)))
+    lines = 0
+    for para in str(text or "").split("\n"):
+        lines += max(1, -(-len(para) // per_line))  # ceil division
+    return round(max(1, lines) * font_size * 1.21)
+
+
+def build_text_element(design: Any, *, text: str, style_from: str,
+                       x: float, y: float, width: float, new_id: str,
+                       ) -> tuple[dict[str, Any] | None, str]:
+    """Build a new text element inheriting typography from ``style_from``.
+
+    Copies font family/weight/size/style/fill/alignment/leading from the named
+    layer so the new element is consistent with the template by construction.
+    Returns (element, "") or (None, error).
+    """
+    src = find_element(design, style_from)
+    if src is None:
+        return None, f"style_from layer '{style_from}' not found"
+    if src.get("type") != "text":
+        return None, f"style_from layer '{style_from}' is a {src.get('type')}, not text"
+    font_size = src.get("fontSize", 24)
+    el = {
+        "type": "text", "id": new_id, "text": text,
+        "x": round(x), "y": round(y), "width": round(width),
+        "height": estimate_text_height(text, font_size, width),
+        "fontFamily": src.get("fontFamily"), "fontWeight": src.get("fontWeight", "normal"),
+        "fontSize": font_size, "fontStyle": src.get("fontStyle", "normal"),
+        "fill": src.get("fill", "rgba(0,0,0,1)"), "align": src.get("align", "left"),
+        "lineHeight": src.get("lineHeight", 1.2), "letterSpacing": src.get("letterSpacing", 0),
+        "rotation": src.get("rotation", 0), "faceId": src.get("faceId", "sheet"),
+    }
+    return el, ""
+
+
+def first_collision(el: dict[str, Any], design: Any) -> str | None:
+    """The id of the first content element ``el`` overlaps (AABB), or None.
+
+    Full-bleed background art (an element covering most of the sheet) is skipped —
+    you always place text over the background; the collision that matters is with
+    other text and the small graphics (rules, a roast scale) it must not cover.
+    """
+    sheet = design.get("sheet") if isinstance(design, dict) else None
+    sw = (sheet or {}).get("width") or 1
+    sh = (sheet or {}).get("height") or 1
+    sheet_area = sw * sh
+    ax, ay, aw, ah = el["x"], el["y"], el["width"], el["height"]
+    for other in _bounded_elements(design):
+        if other.get("id") == el.get("id"):
+            continue
+        bx, by, bw, bh = other["x"], other["y"], other["width"], other["height"]
+        if bw * bh > 0.6 * sheet_area:  # background art — not a collision
+            continue
+        if ax < bx + bw and ax + aw > bx and ay < by + bh and ay + ah > by:
+            return str(other.get("id"))
+    return None
+
+
 def apply_text_edits(design: Any, edits: dict[str, str]) -> int:
     """Set ``.text`` on each text layer whose id is a key in ``edits`` (mutates)."""
     changed = 0
