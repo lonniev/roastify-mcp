@@ -116,7 +116,14 @@ mcp = FastMCP(
         "then call `roastify_update_design_text(design_id, edits={layer_id: text})` "
         "to save a new, text-edited design. The patron applies that new design onto "
         "the new product with the browser courier. The original is never changed and "
-        "the image never leaves the library.\n\n"
+        "the image never leaves the library.\n"
+        "`get_design_text` also returns `elements` (non-text: background art, rules, a "
+        "graphic roast scale) and per-layer geometry. A header with no text value is "
+        "NOT necessarily a defect — its value may be a graphic in `elements`, and a "
+        "layer may not print at all; don't report a missing value as a production "
+        "error. Dimensions are MEASURED text bounds, not fixed frames: text grows "
+        "rather than clips, so hold a layer's line count and longest line and its "
+        "footprint won't change.\n\n"
         "## Pricing\n"
         "Tool prices are set dynamically by the operator's pricing model. Use "
         "`roastify_check_price` to preview costs and `roastify_check_balance` "
@@ -735,6 +742,19 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
     notes, …) from the words it holds. The same name often appears in several layers
     and inside longer blurbs; change every id that should carry it.
 
+    Also returns `sheet` (the overall design extent) and `elements` — the NON-text
+    elements (images, shapes, rules) read-only, each with id, type, name, and bounds.
+    Read those before judging the design: a header with no text value beneath it is
+    NOT necessarily a defect — the value may be a graphic in `elements` (e.g. a
+    five-dot roast scale under a ROAST header), and it tells you where NOT to place
+    new text. Roastify's migrated format carries no visibility flag, so a layer that
+    exists may still not print — do not report a missing value as a production error.
+
+    Geometry: each layer's `x`/`y` is its top-left corner in design units (the sheet
+    origin is its top-left). `width`/`height` are MEASURED text bounds, not fixed
+    frames — text does not clip, it grows, so a revision that holds the line count
+    and longest-line length keeps the footprint.
+
     Two things to respect:
     - A stash label states INTENT, not content: a design labeled for one coffee may
       still hold a donor template's words. Trust these layers, not the label.
@@ -754,14 +774,17 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
         found = await store.get_skeleton(design_id)
         if found is None:
             return {"success": False, "error": f"no design '{design_id}' in your library"}
-        layers = github_store.text_layers(found["skeleton"])
+        skeleton = found["skeleton"]
+        layers = github_store.text_layers(skeleton)
         return {
             "success": True,
             "design_id": design_id,
             "label": found["label"],
             "product_id": found["product_id"],
+            "sheet": github_store.sheet_size(skeleton),
             "count": len(layers),
             "layers": layers,
+            "elements": github_store.non_text_elements(skeleton),
         }
 
     return await _run_github(npub, op)

@@ -65,9 +65,12 @@ def _slug(text: str) -> str:
 def text_layers(design: Any) -> list[dict[str, Any]]:
     """List every text layer with its content, font, and box geometry.
 
-    Each layer's own current text is its label; geometry (fontSize + width/height)
-    lets an editor judge how much replacement text will fit. ``chars`` is the
-    current length, the anchor to write near.
+    Each layer's own current text is its label; geometry lets an editor judge fit
+    and placement: ``x``/``y`` are the top-left corner in design units (the sheet
+    origin is its top-left; ``sheet_size`` gives the extent), and ``width``/``height``
+    are the MEASURED text bounds — text does not clip, it grows, so the footprint
+    is a function of line count and longest line, not a fixed frame. ``chars`` is
+    the current length, the anchor to write near.
     """
     out: list[dict[str, Any]] = []
 
@@ -78,8 +81,11 @@ def text_layers(design: Any) -> list[dict[str, Any]]:
                 out.append({
                     "id": node["id"], "text": text, "chars": len(text),
                     "fontFamily": node.get("fontFamily"), "fontWeight": node.get("fontWeight"),
-                    "fontSize": node.get("fontSize"), "width": node.get("width"),
-                    "height": node.get("height"), "face": node.get("faceId") or node.get("face"),
+                    "fontSize": node.get("fontSize"),
+                    "x": node.get("x"), "y": node.get("y"),
+                    "width": node.get("width"), "height": node.get("height"),
+                    "rotation": node.get("rotation"),
+                    "face": node.get("faceId") or node.get("face"),
                 })
             for v in node.values():
                 walk(v)
@@ -89,6 +95,43 @@ def text_layers(design: Any) -> list[dict[str, Any]]:
 
     walk(design)
     return out
+
+
+def non_text_elements(design: Any) -> list[dict[str, Any]]:
+    """List the NON-text elements (images, shapes, rules) read-only.
+
+    An agent must know these exist so it neither reports a header's value as
+    missing when the value is a graphic (e.g. a five-dot roast scale under a
+    ROAST header), nor places text on top of background art. Each entry carries
+    id, type, name, and bounds (x/y/width/height). Roastify's migrated format
+    carries no visibility flag, so none is reported.
+    """
+    out: list[dict[str, Any]] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            t = node.get("type")
+            if t and t != "text" and node.get("id") is not None and "width" in node:
+                out.append({
+                    "id": node["id"], "type": t, "name": node.get("name"),
+                    "x": node.get("x"), "y": node.get("y"),
+                    "width": node.get("width"), "height": node.get("height"),
+                })
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(design)
+    return out
+
+
+def sheet_size(design: Any) -> dict[str, Any]:
+    """The overall design sheet extent — the coordinate space x/y live in."""
+    s = design.get("sheet") if isinstance(design, dict) else None
+    s = s if isinstance(s, dict) else {}
+    return {"width": s.get("width"), "height": s.get("height")}
 
 
 def apply_text_edits(design: Any, edits: dict[str, str]) -> int:

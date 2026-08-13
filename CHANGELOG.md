@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Read-side geometry + non-text elements in `get_design_text`** (Phase 1 of element creation).
+  Each text layer now reports `x`/`y` (top-left corner in design units; the sheet origin is its
+  top-left) alongside the existing `width`/`height` (measured text bounds, not fixed frames — text
+  grows, it doesn't clip). The response also carries `sheet` (the overall extent) and `elements` —
+  the NON-text elements (images, shapes, rules) read-only, each with id, type, name, and bounds.
+  This lets an agent see the whole panel: a header with no text value is not necessarily a defect
+  (its value may be a graphic in `elements`, e.g. a roast scale), and it shows where NOT to place
+  new text. Roastify's migrated format carries no visibility flag, so none is reported. The two
+  hard-won lessons are added to the instructions and the tool description. Prerequisite for a future
+  `add_design_element` write tool. From Scout's Design-Shuttle element-creation task.
+
 - **Auto-repair the fonts on stash.** Roastify's own schema migration leaves a lossy `fonts[]`
   (a dropped family, a weight a font doesn't ship), so a saved design renders fallback fonts in
   Edit Design even though it's already in the new schema. `stash_design` now rebuilds `fonts[]`
