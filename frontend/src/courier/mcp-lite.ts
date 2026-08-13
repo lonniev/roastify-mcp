@@ -137,4 +137,7 @@ export const api = {
   fetch: (designId: string) =>
     callMcp("fetch_design", { design_id: designId, npub: store.npub(), dpop_token: store.proof() }) as
       Promise<{ success: boolean; design?: Rec; error?: string }>,
+  del: (designId: string) =>
+    callMcp("delete_design", { design_id: designId, npub: store.npub(), dpop_token: store.proof() }) as
+      Promise<{ success: boolean; deleted?: boolean; error?: string }>,
 };

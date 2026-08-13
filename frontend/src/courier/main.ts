@@ -104,47 +104,68 @@ function main(): void {
   sh.innerHTML = `
     <style>
       :host{all:initial}
-      .p{position:fixed;top:16px;right:16px;z-index:2147483647;width:340px;
+      .p{position:fixed;top:16px;right:16px;z-index:2147483647;width:min(420px,calc(100vw - 24px));
         font-family:ui-monospace,Menlo,monospace;color:#e8ece6;background:#171b1a;
-        border:1px solid #2c3432;border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden}
-      .h{display:flex;align-items:center;gap:8px;padding:9px 12px;background:#0d100f;cursor:move;user-select:none}
-      .h b{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#4fbfc0}
-      .h .ic{margin-left:auto;cursor:pointer;color:#828d86;font-size:15px;line-height:1;padding:2px 4px}
+        border:1px solid #2c3432;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.5);
+        display:flex;flex-direction:column;max-height:calc(100vh - 32px)}
+      .p.big{width:min(680px,calc(100vw - 24px))}
+      .h{display:flex;align-items:center;gap:6px;padding:10px 14px;background:#0d100f;
+        cursor:move;user-select:none;flex:0 0 auto;border-radius:12px 12px 0 0}
+      .h b{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#4fbfc0;flex:1}
+      .h .ic{cursor:pointer;color:#828d86;font-size:16px;line-height:1;padding:3px 6px}
       .h .ic:hover{color:#e8ece6}
-      .b{padding:12px;display:flex;flex-direction:column;gap:10px}
-      label{font-size:11px;color:#828d86;display:block;margin-bottom:3px}
-      input,select,button{font:inherit;width:100%;box-sizing:border-box}
-      input,select{background:#101312;color:#e8ece6;border:1px solid #2c3432;border-radius:6px;padding:7px}
-      button{background:#0d7c7f;color:#0b1211;border:0;border-radius:6px;padding:9px;font-weight:700;cursor:pointer}
+      .b{padding:14px;display:flex;flex-direction:column;gap:12px;overflow:auto}
+      label{font-size:11px;color:#828d86;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em}
+      input,select,button{font:inherit;box-sizing:border-box}
+      input,select{width:100%;background:#101312;color:#e8ece6;border:1px solid #2c3432;border-radius:8px;padding:9px;font-size:14px}
+      button{background:#0d7c7f;color:#0b1211;border:0;border-radius:8px;padding:10px;font-weight:700;cursor:pointer}
+      button.wide{width:100%}
       button.alt{background:#3B4248;color:#e8ece6}
-      button:disabled{opacity:.5;cursor:default}
-      .row{display:flex;gap:8px}
-      .warn{color:#dca63f;font-size:11px}
-      .ok{color:#4fbfc0;font-size:11px}
-      hr{border:0;border-top:1px solid #2c3432;margin:2px 0}
-      pre{margin:0;background:#0d100f;border:1px solid #2c3432;border-radius:6px;padding:8px;
-        font-size:11px;line-height:1.5;max-height:180px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+      button.danger{background:transparent;color:#dc8a6f;border:1px solid #5a3a32}
+      button:disabled{opacity:.45;cursor:default}
+      .row{display:flex;gap:8px;align-items:center}
+      .warn{color:#dca63f;font-size:12px}
+      .ok{color:#4fbfc0;font-size:12px}
+      .sec{border-top:1px solid #232b29;padding-top:12px;display:flex;flex-direction:column;gap:8px}
+      .libhead{display:flex;align-items:center;justify-content:space-between}
+      .libhead label{margin:0}
+      .lib{display:flex;flex-direction:column;gap:8px;max-height:34vh;overflow:auto}
+      .p.big .lib{max-height:52vh}
+      .item{border:1px solid #2c3432;border-radius:8px;padding:9px 11px;background:#141817}
+      .item .nm{font-size:13px;color:#e8ece6;font-weight:700;word-break:break-word}
+      .item .mt{font-size:11px;color:#828d86;margin-top:3px}
+      .item .ax{display:flex;gap:8px;margin-top:9px}
+      .item .ax button{flex:1;padding:8px}
+      .empty{color:#828d86;font-size:12px;padding:6px 0}
+      #work{flex-direction:column;gap:12px}
+      pre{margin:0;background:#0d100f;border:1px solid #2c3432;border-radius:8px;padding:9px;
+        font-size:11px;line-height:1.5;max-height:120px;overflow:auto;white-space:pre-wrap;word-break:break-word}
     </style>
     <div class="p">
-      <div class="h" id="hd"><b>Design courier</b><span class="ic" id="x" title="Close">&#x2715;</span></div>
+      <div class="h" id="hd"><b>Design courier</b>
+        <span class="ic" id="exp" title="Expand / shrink">&#x2922;</span>
+        <span class="ic" id="x" title="Close">&#x2715;</span></div>
       <div class="b">
         <div id="login">
           <label>Log in to Roastify MCP with your npub</label>
           <input id="npub" placeholder="npub1…" autocapitalize="off" autocorrect="off" spellcheck="false" />
-          <div class="row" style="margin-top:8px"><button id="send">Send login DM</button></div>
-          <div id="await" style="display:none;margin-top:8px">
+          <div class="row" style="margin-top:8px"><button class="wide" id="send">Send login DM</button></div>
+          <div id="await" style="display:none;margin-top:10px">
             <div class="warn">Reply to the Nostr DM with any phrase, then:</div>
-            <button id="confirm" style="margin-top:6px">I replied — confirm</button>
+            <button class="wide" id="confirm" style="margin-top:8px">I replied — confirm</button>
           </div>
         </div>
         <div id="work" style="display:none">
           <div class="ok" id="who"></div>
-          <hr/>
-          <div><label>Product</label><select id="prod"></select></div>
-          <button id="stash" disabled>Send this design → library</button>
-          <hr/>
-          <div><label>Library design</label><select id="lib"></select></div>
-          <button id="apply" class="alt" disabled>Apply library design → this product</button>
+          <div class="sec">
+            <div><label>Product</label><select id="prod"></select></div>
+            <button class="wide" id="stash" disabled>&#x2B06; Send this product's design to Library</button>
+          </div>
+          <div class="sec">
+            <div class="libhead"><label>Library <span id="libn"></span></label>
+              <span class="ic" id="r" title="Refresh">&#x21bb;</span></div>
+            <div class="lib" id="lib"></div>
+          </div>
         </div>
         <pre id="log">Log in to begin.</pre>
       </div>
@@ -157,6 +178,7 @@ function main(): void {
     el.scrollTop = 1e9;
   };
   $("x").onclick = () => host.remove();
+  $("exp").onclick = () => (sh.querySelector(".p") as HTMLElement).classList.toggle("big");
 
   (() => {
     let dx = 0, dy = 0, on = false;
@@ -206,7 +228,7 @@ function main(): void {
       const token = r.dpop_token || pendingProof;
       store.setProof(token);
       $("login").style.display = "none";
-      $("work").style.display = "block";
+      $("work").style.display = "flex";
       $("who").textContent = `✓ ${npub.slice(0, 16)}… logged in`;
       log("logged in. Loading your products and library…");
       await Promise.all([loadProducts(), loadLibrary()]);
@@ -230,26 +252,65 @@ function main(): void {
       list.forEach((p, i) => sel.add(new Option(labelOf(p), String(i))));
       sel.selectedIndex = keep >= 0 && keep < list.length ? keep : 0;
       ($("stash") as HTMLButtonElement).disabled = !list.length;
-      ($("apply") as HTMLButtonElement).disabled = !list.length || !($("lib") as HTMLSelectElement).length;
+      renderLibrary();
       log(`${list.length} products loaded.`);
     } catch (e) {
       log("✗ products: " + (e as Error).message);
     }
   };
+  $("r").onclick = () => void Promise.all([loadProducts(), loadLibrary()]);
 
   let LIBRARY: StoredDesignMeta[] = [];
+
+  // Render the library as a browsable list — one row per design, each with its
+  // own Apply and Delete. The courier is the only UX for these, so it carries
+  // the full lifecycle.
+  const renderLibrary = () => {
+    const box = $("lib");
+    box.textContent = "";
+    $("libn").textContent = LIBRARY.length ? `(${LIBRARY.length})` : "";
+    if (!LIBRARY.length) {
+      const e = document.createElement("div");
+      e.className = "empty";
+      e.textContent = "No saved designs yet — send a product's design up with the button above.";
+      box.appendChild(e);
+      return;
+    }
+    for (const d of LIBRARY) {
+      const item = document.createElement("div");
+      item.className = "item";
+      const nm = document.createElement("div");
+      nm.className = "nm";
+      nm.textContent = d.label || d.source_title || d.design_id.slice(0, 8);
+      const mt = document.createElement("div");
+      mt.className = "mt";
+      const when = d.updated_at ? String(d.updated_at).slice(0, 10) : "";
+      const src = d.source_title && d.source_title !== d.label ? `from ${d.source_title}` : "";
+      const kb = d.bytes ? `${Math.round(d.bytes / 1024)} KB` : "";
+      mt.textContent = [src, when, kb].filter(Boolean).join(" · ");
+      const ax = document.createElement("div");
+      ax.className = "ax";
+      const applyBtn = document.createElement("button");
+      applyBtn.textContent = "⬇ Apply";
+      applyBtn.disabled = !PRODUCTS.length;
+      applyBtn.onclick = () => applyDesign(d);
+      const delBtn = document.createElement("button");
+      delBtn.className = "danger";
+      delBtn.textContent = "🗑 Delete";
+      delBtn.onclick = () => deleteDesign(d);
+      ax.append(applyBtn, delBtn);
+      item.append(nm, mt, ax);
+      box.appendChild(item);
+    }
+  };
+
   const loadLibrary = async () => {
     try {
       const r = await api.list();
       if (r.success === false) { log("✗ library: " + (r.error || "unavailable")); return; }
       LIBRARY = r.designs || [];
-      const sel = $("lib") as HTMLSelectElement;
-      sel.length = 0;
-      LIBRARY.forEach((d, i) =>
-        sel.add(new Option(`${d.label || d.source_title || d.design_id.slice(0, 8)} (${d.product_id || "—"})`, String(i))),
-      );
-      ($("apply") as HTMLButtonElement).disabled = !LIBRARY.length || !PRODUCTS.length;
-      log(`${LIBRARY.length} designs in your library.`);
+      renderLibrary();
+      log(`${LIBRARY.length} design${LIBRARY.length === 1 ? "" : "s"} in your library.`);
     } catch (e) {
       log("✗ library: " + (e as Error).message);
     }
@@ -282,21 +343,19 @@ function main(): void {
 
   // Fetch a library design and WRITE it onto the selected product. The target's
   // own preview/mockups are reused; the Designer re-renders on open.
-  $("apply").onclick = async () => {
+  const applyDesign = async (meta: StoredDesignMeta) => {
     const target = PRODUCTS[+val("prod")];
-    const meta = LIBRARY[+val("lib")];
-    if (!target || !meta) return;
+    if (!target) { log("✗ pick a product first."); return; }
     if (!target.designImageUrl) {
-      log("✗ target has no existing design image — open it once in the Designer first.");
+      log(`✗ “${labelOf(target)}” has no saved design yet — open it once in the Designer first.`);
       return;
     }
-    ($("apply") as HTMLButtonElement).disabled = true;
-    log(`fetching “${meta.label || meta.design_id.slice(0, 8)}”…`);
+    const name = meta.label || meta.design_id.slice(0, 8);
+    log(`applying “${name}” → “${labelOf(target)}”…`);
     try {
       const r = await api.fetch(meta.design_id);
       if (!r.success || !r.design) { log("✗ " + (r.error || "fetch failed")); return; }
       const design = r.design;
-      log(`uploading design onto “${labelOf(target)}”…`);
       const jsonKey = `design-json/${rid()}.json`;
       const put = (await mutate("aws.getPresignedUrl", {
         filename: jsonKey, filetype: "application/json",
@@ -312,18 +371,32 @@ function main(): void {
         productId: idOf(target), cleanJsonUrl: STORAGE + jsonKey, s3KeyJson: jsonKey,
         cleanImageUrl: preview.imageUrl, s3KeyImage: preview.s3Key, imageUrls,
       });
-      log(`✓ applied. Open “${labelOf(target)}” in the Designer to see it render.`);
+      log(`✓ applied “${name}”. Open “${labelOf(target)}” in the Designer to see it render.`);
     } catch (e) {
       log("✗ " + (e as Error).message);
-    } finally {
-      ($("apply") as HTMLButtonElement).disabled = false;
+    }
+  };
+
+  // Delete a design from the MCP library. The courier is the only UX for the
+  // library, so this is where a design's life ends. Confirm first.
+  const deleteDesign = async (meta: StoredDesignMeta) => {
+    const name = meta.label || meta.design_id.slice(0, 8);
+    if (!confirm(`Delete “${name}” from your design library?\n\nThis only removes the saved design — it does not touch any product.`)) return;
+    log(`deleting “${name}”…`);
+    try {
+      const r = await api.del(meta.design_id);
+      if (r.success === false && !r.deleted) { log("✗ " + (r.error || "delete failed")); return; }
+      log(`✓ deleted “${name}”.`);
+      await loadLibrary();
+    } catch (e) {
+      log("✗ " + (e as Error).message);
     }
   };
 
   // Already logged in on this origin? Skip straight to work.
   if (store.npub() && store.proof()) {
     $("login").style.display = "none";
-    $("work").style.display = "block";
+    $("work").style.display = "flex";
     $("who").textContent = `✓ ${store.npub().slice(0, 16)}… logged in`;
     log("logged in. Loading your products and library…");
     void Promise.all([loadProducts(), loadLibrary()]);
