@@ -6,29 +6,17 @@
  * that need the patron's npub. It holds NO redesign logic: the Design Bench
  * does all editing and font-repair.
  *
- * Auth is the standard DPYC protocol, reused verbatim from the Bench's client
- * (lib/mcp.ts): the user logs into roastify-mcp with their npub via the DM-proof
- * dance, and the courier sends its held dpop_token on every tool call. The
- * merchant origin's localStorage is separate from the Bench, so the courier logs
- * in once here.
+ * Auth is the standard DPYC protocol: the user logs into roastify-mcp with their
+ * npub via the DM-proof dance, and the courier sends its held dpop_token on every
+ * tool call. The merchant origin's localStorage is separate from the Bench, so
+ * the courier logs in once here.
  *
- * The MCP is reached through the Bench's Cloudflare proxy (Access-Control-Allow-
- * Origin: *), so calls work from the merchant origin. VITE_MCP_URL is baked
- * absolute at build time (see vite.courier.config.ts).
+ * MCP calls go through a minimal POST-based client (./mcp-lite), NOT the official
+ * SDK: the SDK's streaming transport fails cross-origin in iPad Safari, where the
+ * courier lives (merchant origin) but the MCP is on the Bench's origin. The MCP is
+ * reached through the Bench's Cloudflare proxy (Access-Control-Allow-Origin: *).
  */
-import {
-  fetchDesign,
-  getStoredNpub,
-  getStoredProof,
-  listDesigns,
-  receiveNpubProof,
-  recordRecentLogin,
-  requestNpubProof,
-  setStoredNpub,
-  setStoredProof,
-  stashDesign,
-  type StoredDesignMeta,
-} from "../lib/mcp";
+import { api, store, type StoredDesignMeta } from "./mcp-lite";
 
 type Rec = Record<string, unknown>;
 
@@ -194,24 +182,11 @@ function main(): void {
     ($("send") as HTMLButtonElement).disabled = true;
     log("sending login DM…");
     try {
-      // DIAG: raw reachability probe — distinguishes a network/CORS failure from
-      // an MCP-SDK/streaming failure before we blame the wrong layer.
-      try {
-        const probe = await fetch("https://roastify.tollbooth-dpyc.com/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "c", version: "0" } } }),
-        });
-        log("probe: MCP reachable (HTTP " + probe.status + ")");
-      } catch (pe) {
-        log("probe: raw MCP fetch FAILED — " + (pe as Error).name + ": " + (pe as Error).message);
-      }
-
-      const r = await requestNpubProof(
+      const r = await api.requestProof(
         npub, location.origin, `You requested to log in to Roastify (${location.host}).`,
       );
       if (r.error || !r.dpop_token) { log("✗ " + (r.error || "no session phrase returned")); return; }
-      setStoredNpub(npub);
+      store.setNpub(npub);
       pendingProof = r.dpop_token;
       $("await").style.display = "block";
       log("DM sent. Reply to it, then tap confirm.");
@@ -226,11 +201,10 @@ function main(): void {
     ($("confirm") as HTMLButtonElement).disabled = true;
     log("verifying reply…");
     try {
-      const r = await receiveNpubProof(npub, pendingProof);
+      const r = await api.receiveProof(npub, pendingProof);
       if (r.error) { log("✗ " + r.error); return; }
       const token = r.dpop_token || pendingProof;
-      setStoredProof(token);
-      recordRecentLogin(npub, token, 3600);
+      store.setProof(token);
       $("login").style.display = "none";
       $("work").style.display = "block";
       $("who").textContent = `✓ ${npub.slice(0, 16)}… logged in`;
@@ -266,7 +240,7 @@ function main(): void {
   let LIBRARY: StoredDesignMeta[] = [];
   const loadLibrary = async () => {
     try {
-      const r = await listDesigns();
+      const r = await api.list();
       if (r.success === false) { log("✗ library: " + (r.error || "unavailable")); return; }
       LIBRARY = r.designs || [];
       const sel = $("lib") as HTMLSelectElement;
@@ -291,7 +265,7 @@ function main(): void {
     try {
       const design = await readDesign(p.designJson);
       log(`stashing ${JSON.stringify(design).length.toLocaleString()} bytes…`);
-      const r = await stashDesign(design, {
+      const r = await api.stash(design, {
         label: labelOf(p),
         productId: idOf(p),
         sourceTitle: labelOf(p),
@@ -319,7 +293,7 @@ function main(): void {
     ($("apply") as HTMLButtonElement).disabled = true;
     log(`fetching “${meta.label || meta.design_id.slice(0, 8)}”…`);
     try {
-      const r = await fetchDesign(meta.design_id);
+      const r = await api.fetch(meta.design_id);
       if (!r.success || !r.design) { log("✗ " + (r.error || "fetch failed")); return; }
       const design = r.design;
       log(`uploading design onto “${labelOf(target)}”…`);
@@ -347,10 +321,10 @@ function main(): void {
   };
 
   // Already logged in on this origin? Skip straight to work.
-  if (getStoredNpub() && getStoredProof()) {
+  if (store.npub() && store.proof()) {
     $("login").style.display = "none";
     $("work").style.display = "block";
-    $("who").textContent = `✓ ${getStoredNpub().slice(0, 16)}… logged in`;
+    $("who").textContent = `✓ ${store.npub().slice(0, 16)}… logged in`;
     log("logged in. Loading your products and library…");
     void Promise.all([loadProducts(), loadLibrary()]);
   }
