@@ -28,7 +28,7 @@ from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.session_cache import SessionCache
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity
 
-from roastify_mcp import __version__, design_store, roastify
+from roastify_mcp import __version__, github_store, roastify
 
 logger = logging.getLogger(__name__)
 
@@ -95,14 +95,19 @@ mcp = FastMCP(
         "placeholders of a design you authored in Design Studio. It cannot "
         "author a design from scratch, and the artwork URL it returns is not "
         "attached to a product — you carry it onward yourself. Rendering is asynchronous: `roastify_generate_artwork` hands back a job id and `roastify_artwork_status` checks it, free.\n\n"
-        "## Design library (bring your own designs)\n"
-        "The operator can hold your saved Roastify designs for you, keyed to "
-        "your npub: `roastify_stash_design` stores one, `roastify_list_designs` "
+        "## Design library (a GitHub repo YOU own)\n"
+        "Your designs live in a GitHub repo you own; the operator is only the "
+        "broker, committing on your behalf with a vaulted token. So you get "
+        "version history, and you can browse, rename, and delete designs in "
+        "GitHub itself. `roastify_stash_design` commits one, `roastify_list_designs` "
         "lists them, `roastify_fetch_design` returns one, `roastify_delete_design` "
-        "removes one. This is storage only — the operator never writes a design "
-        "onto a Roastify product (that needs your Merchant App session and is "
-        "done by the browser courier). Use it to keep a branded template you "
-        "shuttle back onto your products.\n\n"
+        "removes one. Storage only — the operator never writes a design onto a "
+        "Roastify product (that needs your Merchant App session, done by the "
+        "browser courier).\n"
+        "One-time setup: deliver a GitHub fine-grained token (Contents read/write) "
+        "and your 'owner/repo' via `roastify_request_patron_credentials` (fields "
+        "`github_token`, `github_repo`). The repo needs at least one commit (a "
+        "README) so its default branch exists.\n\n"
         "## Generate a branded variant in chat\n"
         "To spin a new product from a saved design without moving megabytes of "
         "artwork: call `roastify_get_design_text` to see the design's editable "
@@ -257,6 +262,27 @@ runtime = OperatorRuntime(
                     "Base or Pro plan. Live keys start with 'rty_live_'; "
                     "sandbox keys start with 'rty_test_' and do not fulfill."
                 ),
+            ),
+            # The design library lives in a repo you own; the operator commits to
+            # it on your behalf. Only needed if you use the library.
+            "github_token": FieldSpec(
+                required=False, sensitive=True,
+                description=(
+                    "A GitHub fine-grained personal access token with Contents "
+                    "read/write on the repo that stores your designs. Only needed "
+                    "for the design library."
+                ),
+            ),
+            "github_repo": FieldSpec(
+                required=False, sensitive=False,
+                description=(
+                    "The 'owner/repo' that holds your designs, e.g. "
+                    "'goodbrew/coffee-designs'. Only needed for the design library."
+                ),
+            ),
+            "github_branch": FieldSpec(
+                required=False, sensitive=False,
+                description="Branch for design commits (default 'main').",
             ),
         },
     ),
@@ -552,37 +578,53 @@ async def artwork_status(job_id: str, npub: _NPUB = "",
 
 
 # ---------------------------------------------------------------------------
-# Design library — the patron's own designs, stored in the operator's Neon.
+# Design library — the patron's own designs, stored in a GitHub repo THEY own.
 #
 # Storage only. None of these tools call Roastify: the browser courier reads a
-# product's design (merchant session) and stashes it here; the Design Bench
-# edits it; the courier fetches it back and writes it onto a product. The
-# operator never holds a merchant session and never mutates Roastify.
+# product's design (merchant session) and stashes it here; an agent edits its
+# text; the courier fetches it back and writes it onto a product. The operator
+# is only the broker — it holds a vaulted GitHub token and commits on the
+# patron's behalf. Git gives version history, free content-addressed image
+# de-dup, and GitHub's own UI as the management surface.
 # ---------------------------------------------------------------------------
 
 
-async def _run_library(op: Any) -> dict[str, Any]:
-    """Run a design-library op against the operator vault, naming failures.
+_GITHUB_MISSING = (
+    "No design-library repo is configured for your identity. The library lives "
+    "in a GitHub repo you own; deliver a fine-grained GitHub token (Contents: "
+    "read/write) and your 'owner/repo' via roastify_request_patron_credentials "
+    "— fields github_token and github_repo (and optionally github_branch)."
+)
 
-    A cold or quota-blocked vault becomes a structured situation rather than a
-    stack trace; the patron's stored designs are never at risk from a read that
-    could not run.
-    """
-    from tollbooth.persistence_errors import classify_persistence_failure
 
+async def _require_github(npub: str) -> github_store.GitHubStore:
+    """Resolve ``npub`` to a client for that patron's design repo, or refuse."""
+    creds, situation = await runtime.load_patron_session(npub)
+    if situation:
+        raise ValueError(_SESSION_GUIDANCE.get(situation, _SESSION_GUIDANCE["vault_bootstrapping"]))
+    if not creds:
+        raise ValueError(_SESSION_GUIDANCE["no_credentials"])
+    token, repo = creds.get("github_token", ""), creds.get("github_repo", "")
+    if not token or not repo:
+        raise ValueError(_GITHUB_MISSING)
+    return github_store.GitHubStore.from_spec(token, repo, creds.get("github_branch", ""))
+
+
+async def _run_github(npub: str, op: Any) -> dict[str, Any]:
+    """Run a design-library op against the patron's repo, naming failures."""
     try:
-        vault = await runtime.vault()
-        return await op(vault)
+        store = await _require_github(npub)
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+    try:
+        return await op(store)
+    except github_store.GitHubError as exc:
+        return {"success": False, "error": str(exc), "status": exc.status}
     except Exception as exc:  # noqa: BLE001
-        situation = classify_persistence_failure(exc)
-        logger.warning("design library op failed (%s): %s", situation, exc)
+        logger.warning("design library op failed: %s", exc)
         return {
             "success": False,
-            "situation": situation or "library_unavailable",
-            "error": (
-                "The design library is temporarily unavailable; your stored "
-                "designs are unaffected. Retry shortly."
-            ),
+            "error": "The design library is temporarily unavailable; retry shortly.",
         }
 
 
@@ -614,14 +656,14 @@ async def stash_design(
     if not isinstance(design, dict) or not design:
         return {"success": False, "error": "design must be a non-empty JSON object"}
 
-    async def op(vault: Any) -> dict[str, Any]:
-        meta = await design_store.put_design(
-            vault, npub, design, design_id=design_id, label=label,
+    async def op(store: github_store.GitHubStore) -> dict[str, Any]:
+        meta = await store.put_design(
+            design, design_id=design_id, label=label,
             product_id=product_id, source_title=source_title,
         )
         return {"success": True, **meta}
 
-    return await _run_library(op)
+    return await _run_github(npub, op)
 
 
 @tool
@@ -636,13 +678,13 @@ async def fetch_design(design_id: str, npub: _NPUB = "",
     if not design_id:
         return {"success": False, "error": "design_id is required"}
 
-    async def op(vault: Any) -> dict[str, Any]:
-        found = await design_store.get_design(vault, npub, design_id)
+    async def op(store: github_store.GitHubStore) -> dict[str, Any]:
+        found = await store.get_design(design_id)
         if found is None:
             return {"success": False, "error": f"no design '{design_id}' in your library"}
         return {"success": True, **found}
 
-    return await _run_library(op)
+    return await _run_github(npub, op)
 
 
 @tool
@@ -650,11 +692,11 @@ async def fetch_design(design_id: str, npub: _NPUB = "",
 async def list_designs(npub: _NPUB = "", dpop_token: str = "") -> dict[str, Any]:
     """List your stored designs — metadata only, newest first."""
 
-    async def op(vault: Any) -> dict[str, Any]:
-        designs = await design_store.list_designs(vault, npub)
+    async def op(store: github_store.GitHubStore) -> dict[str, Any]:
+        designs = await store.list_designs()
         return {"success": True, "count": len(designs), "designs": designs}
 
-    return await _run_library(op)
+    return await _run_github(npub, op)
 
 
 @tool
@@ -669,11 +711,11 @@ async def delete_design(design_id: str, npub: _NPUB = "",
     if not design_id:
         return {"success": False, "error": "design_id is required"}
 
-    async def op(vault: Any) -> dict[str, Any]:
-        removed = await design_store.delete_design(vault, npub, design_id)
+    async def op(store: github_store.GitHubStore) -> dict[str, Any]:
+        removed = await store.delete_design(design_id)
         return {"success": removed, "deleted": removed, "design_id": design_id}
 
-    return await _run_library(op)
+    return await _run_github(npub, op)
 
 
 @tool
@@ -704,11 +746,11 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
     if not design_id:
         return {"success": False, "error": "design_id is required"}
 
-    async def op(vault: Any) -> dict[str, Any]:
-        found = await design_store.get_skeleton(vault, npub, design_id)
+    async def op(store: github_store.GitHubStore) -> dict[str, Any]:
+        found = await store.get_skeleton(design_id)
         if found is None:
             return {"success": False, "error": f"no design '{design_id}' in your library"}
-        layers = design_store.text_layers(found["skeleton"])
+        layers = github_store.text_layers(found["skeleton"])
         return {
             "success": True,
             "design_id": design_id,
@@ -718,7 +760,7 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
             "layers": layers,
         }
 
-    return await _run_library(op)
+    return await _run_github(npub, op)
 
 
 @tool
@@ -755,19 +797,19 @@ async def update_design_text(
     if not edit_map:
         return {"success": False, "error": "edits must be a non-empty {layer_id: new_text} map"}
 
-    async def op(vault: Any) -> dict[str, Any]:
-        found = await design_store.get_skeleton(vault, npub, design_id)
+    async def op(store: github_store.GitHubStore) -> dict[str, Any]:
+        found = await store.get_skeleton(design_id)
         if found is None:
             return {"success": False, "error": f"no design '{design_id}' in your library"}
         skeleton = found["skeleton"]
-        changed = design_store.apply_text_edits(skeleton, edit_map)
+        changed = github_store.apply_text_edits(skeleton, edit_map)
         if changed == 0:
             return {
                 "success": False,
                 "error": "none of those layer ids matched; call roastify_get_design_text for valid ids",
             }
-        meta = await design_store.put_design(
-            vault, npub, skeleton,
+        meta = await store.put_design(
+            skeleton,
             label=label or f"{found['label']} (edited)",
             product_id=found["product_id"], source_title=found["source_title"],
         )
@@ -779,7 +821,7 @@ async def update_design_text(
             "layers_changed": changed,
         }
 
-    return await _run_library(op)
+    return await _run_github(npub, op)
 
 
 # ---------------------------------------------------------------------------
