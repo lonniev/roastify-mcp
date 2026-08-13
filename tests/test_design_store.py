@@ -156,3 +156,49 @@ async def test_stash_is_scoped_by_npub():
     # Another patron cannot see or fetch it.
     assert await ds.get_design(v, "npub1stranger", m["design_id"]) is None
     assert await ds.list_designs(v, "npub1stranger") == []
+
+
+# ---------------------------------------------------------------------------
+# Field-level text read / edit
+# ---------------------------------------------------------------------------
+
+
+def test_text_layers_lists_only_text_with_ids():
+    layers = ds.text_layers(DESIGN)
+    assert [(x["id"], x["text"]) for x in layers] == [("t1", "Ethiopia")]
+    assert layers[0]["fontFamily"] == "Poppins"
+
+
+def test_apply_text_edits_changes_only_named_layers():
+    d = json.loads(json.dumps(DESIGN))
+    changed = ds.apply_text_edits(d, {"t1": "Colombia", "missing": "x"})
+    assert changed == 1
+    assert ds.text_layers(d)[0]["text"] == "Colombia"
+    # the image element is untouched
+    assert d["elements"][0]["src"] == _IMG
+
+
+async def test_get_skeleton_never_inlines_images():
+    v = FakeVault()
+    m = await ds.put_design(v, NPUB, DESIGN, label="e")
+    skel = await ds.get_skeleton(v, NPUB, m["design_id"])
+    assert skel is not None
+    # the heavy image is an asset:// marker in the skeleton, not the base64
+    assert _IMG not in json.dumps(skel["skeleton"])
+    assert "asset://" in json.dumps(skel["skeleton"])
+
+
+async def test_update_via_store_makes_new_design_sharing_the_image():
+    v = FakeVault()
+    m = await ds.put_design(v, NPUB, DESIGN, label="master")
+    writes = v.asset_writes
+    skel = (await ds.get_skeleton(v, NPUB, m["design_id"]))["skeleton"]
+    ds.apply_text_edits(skel, {"t1": "Guatemala"})
+    m2 = await ds.put_design(v, NPUB, skel, label="Guatemala")
+    # New design, no new asset chunks (the image is shared by content hash)…
+    assert m2["design_id"] != m["design_id"]
+    assert v.asset_writes == writes
+    # …and fetching the new one re-inlines the shared image with the new text.
+    got = await ds.get_design(v, NPUB, m2["design_id"])
+    assert got["design"]["elements"][0]["src"] == _IMG
+    assert ds.text_layers(got["design"])[0]["text"] == "Guatemala"
