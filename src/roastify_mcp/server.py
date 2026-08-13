@@ -18,6 +18,7 @@ Run locally:
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Annotated, Any
 
 from fastmcp import FastMCP
@@ -28,7 +29,7 @@ from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.session_cache import SessionCache
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity
 
-from roastify_mcp import __version__, github_store, roastify
+from roastify_mcp import __version__, dieline, github_store, roastify
 
 logger = logging.getLogger(__name__)
 
@@ -118,12 +119,18 @@ mcp = FastMCP(
         "the new product with the browser courier. The original is never changed and "
         "the image never leaves the library.\n"
         "`get_design_text` also returns `elements` (non-text: background art, rules, a "
-        "graphic roast scale) and per-layer geometry. A header with no text value is "
+        "graphic roast scale), `panels` (the box's front/back/left/right columns), a "
+        "real `face` per item, and per-layer geometry. A header with no text value is "
         "NOT necessarily a defect — its value may be a graphic in `elements`, and a "
         "layer may not print at all; don't report a missing value as a production "
         "error. Dimensions are MEASURED text bounds, not fixed frames: text grows "
         "rather than clips, so hold a layer's line count and longest line and its "
-        "footprint won't change.\n\n"
+        "footprint won't change.\n"
+        "To ADD copy to an empty region (e.g. a bare side panel), "
+        "`roastify_add_design_element(design_id, face, text, style_from, position)` "
+        "places a new text element that inherits an existing layer's typography and "
+        "is refused if it leaves the panel or overlaps anything. Position it absolutely "
+        "{x,y} in an empty panel, or relative to a sibling {below: layer_id, gap: G}.\n\n"
         "## Pricing\n"
         "Tool prices are set dynamically by the operator's pricing model. Use "
         "`roastify_check_price` to preview costs and `roastify_check_balance` "
@@ -151,6 +158,7 @@ LIST_DESIGNS_UUID        = "9bcfb147-3bfb-58dd-98f7-bdc1d83f5d4c"
 DELETE_DESIGN_UUID       = "45014cff-c156-5f3e-bfea-dfb9131340d9"
 GET_DESIGN_TEXT_UUID     = "2569b7b5-a380-59fa-a60b-32c3666c1e1b"
 UPDATE_DESIGN_TEXT_UUID  = "0acef2a3-c54a-5134-a30b-9a15e01b98d5"
+ADD_DESIGN_ELEMENT_UUID  = "d786f8d9-16a9-5e32-84ed-26edadc10ba9"
 
 _DOMAIN_TOOLS = [
     ToolIdentity(
@@ -215,6 +223,10 @@ _DOMAIN_TOOLS = [
     ToolIdentity(
         tool_id=UPDATE_DESIGN_TEXT_UUID, capability="update_design_text", category="write",
         intent="Save a text-edited copy of a stored design as a new design",
+    ),
+    ToolIdentity(
+        tool_id=ADD_DESIGN_ELEMENT_UUID, capability="add_design_element", category="write",
+        intent="Add a new text element to a stored design, saved as a new design",
     ),
 ]
 
@@ -742,8 +754,11 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
     notes, …) from the words it holds. The same name often appears in several layers
     and inside longer blurbs; change every id that should carry it.
 
-    Also returns `sheet` (the overall design extent) and `elements` — the NON-text
-    elements (images, shapes, rules) read-only, each with id, type, name, and bounds.
+    Also returns `sheet` (the overall design extent), `panels` (the box's panel
+    columns — front/back/left/right — recovered from the dieline, each with bounds),
+    and a real `face` per layer/element (which panel its x-centre sits on, not the
+    constant "sheet"). And `elements` — the NON-text elements (images, shapes, rules)
+    read-only, each with id, type, name, and bounds.
     Read those before judging the design: a header with no text value beneath it is
     NOT necessarily a defect — the value may be a graphic in `elements` (e.g. a
     five-dot roast scale under a ROAST header), and it tells you where NOT to place
@@ -775,16 +790,28 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
         if found is None:
             return {"success": False, "error": f"no design '{design_id}' in your library"}
         skeleton = found["skeleton"]
+        product_type = skeleton.get("productType", "")
+        panels = await dieline.panels_for(product_type)
         layers = github_store.text_layers(skeleton)
+        elements = github_store.non_text_elements(skeleton)
+        # Assign a real panel `face` by which body column each item's x-centre
+        # falls in (derived from the dieline; the design itself only says "sheet").
+        if panels:
+            for item in [*layers, *elements]:
+                x, w = item.get("x"), item.get("width")
+                if isinstance(x, (int, float)) and isinstance(w, (int, float)):
+                    item["face"] = dieline.face_of(x + w / 2, panels) or item.get("face")
         return {
             "success": True,
             "design_id": design_id,
             "label": found["label"],
             "product_id": found["product_id"],
+            "product_type": product_type,
             "sheet": github_store.sheet_size(skeleton),
+            "panels": panels,
             "count": len(layers),
             "layers": layers,
-            "elements": github_store.non_text_elements(skeleton),
+            "elements": elements,
         }
 
     return await _run_github(npub, op)
@@ -846,6 +873,125 @@ async def update_design_text(
             "label": meta["label"],
             "from_design_id": design_id,
             "layers_changed": changed,
+        }
+
+    return await _run_github(npub, op)
+
+
+# Inset kept clear of a panel edge. The dieline carries no real safe area
+# (bleed is 0), so this is a conservative default, not a printer's spec.
+_PANEL_MARGIN = 60
+
+
+@tool
+@runtime.paid_tool(ADD_DESIGN_ELEMENT_UUID)
+async def add_design_element(
+    design_id: str,
+    face: str,
+    text: str,
+    style_from: str,
+    position: dict[str, Any],
+    width: int = 0,
+    label: str = "",
+    client_req_id: str = "",
+    npub: _NPUB = "",
+    dpop_token: str = "",
+) -> dict[str, Any]:
+    """Add a new TEXT element to a design and save the result as a NEW design.
+
+    The source design is untouched; a new design_id AND the new element's id come
+    back, so you can immediately edit the new text by id with update_design_text.
+    Placement is validated server-side and REFUSED, not warned: the element must
+    fall inside the named panel (with a default margin — the dieline carries no real
+    safe area) and must not overlap any existing element (the collider's id is
+    named). Typography is inherited, so a new element matches the template.
+
+    Args:
+        design_id: The design to add to, from roastify_list_designs.
+        face: The panel to place it on — one of the `panels` from get_design_text
+            (e.g. "right"). The element's centre must land in that panel.
+        text: The element's text (\\n for line breaks).
+        style_from: An existing TEXT layer id (from get_design_text) whose font,
+            size, weight, colour, alignment, and leading the new element inherits.
+        position: Where to place it. Either absolute {"x": N, "y": M} (top-left in
+            design units), or relative to an existing element:
+            {"below"|"above"|"rightOf"|"leftOf": "layer_id", "gap": G}. Relative is
+            best when there's a sibling to anchor to; an empty panel needs absolute.
+        width: The text box (wrap) width in design units. Defaults to the panel
+            width minus margins.
+        label: Name for the new design (defaults to the source label + " +text").
+        client_req_id: Your idempotency key.
+    """
+    for name, val in (("design_id", design_id), ("face", face), ("text", text), ("style_from", style_from)):
+        if not val:
+            return {"success": False, "error": f"{name} is required"}
+    if not isinstance(position, dict) or not position:
+        return {"success": False, "error": "position must be {x,y} or a relative anchor"}
+
+    async def op(store: github_store.GitHubStore) -> dict[str, Any]:
+        found = await store.get_skeleton(design_id)
+        if found is None:
+            return {"success": False, "error": f"no design '{design_id}' in your library"}
+        design = found["skeleton"]
+        panels = await dieline.panels_for(design.get("productType", ""))
+        panel = panels.get(face.lower())
+        if not panel:
+            return {"success": False,
+                    "error": f"unknown panel '{face}'; panels are {sorted(panels) or 'unavailable'}"}
+
+        box_w = int(width) if width else max(80, panel["width"] - 2 * _PANEL_MARGIN)
+
+        # Resolve position: absolute, or relative to an existing element.
+        if "x" in position and "y" in position:
+            px, py = float(position["x"]), float(position["y"])
+        else:
+            rel = next((k for k in ("below", "above", "rightOf", "leftOf") if k in position), "")
+            ref = github_store.find_element(design, str(position.get(rel, ""))) if rel else None
+            if ref is None:
+                return {"success": False,
+                        "error": "position needs {x,y} or a valid {below|above|rightOf|leftOf: layer_id}"}
+            gap = float(position.get("gap", _PANEL_MARGIN))
+            rx, ry, rw, rh = ref["x"], ref["y"], ref["width"], ref["height"]
+            px, py = rx, ry
+            if rel == "below":
+                py = ry + rh + gap
+            elif rel == "above":
+                py = ry - gap  # top of the new box lands gap above the ref's top
+            elif rel == "rightOf":
+                px = rx + rw + gap
+            elif rel == "leftOf":
+                px = rx - gap
+
+        el, err = github_store.build_text_element(
+            design, text=text, style_from=style_from, x=px, y=py, width=box_w,
+            new_id=f"add-{uuid.uuid4().hex[:8]}",
+        )
+        if el is None:
+            return {"success": False, "error": err}
+
+        # Refuse rather than warn: inside the panel (with margin), and no overlap.
+        pl, pt = panel["x"] + _PANEL_MARGIN, panel["y"] + _PANEL_MARGIN
+        pr, pb = panel["x"] + panel["width"] - _PANEL_MARGIN, panel["y"] + panel["height"] - _PANEL_MARGIN
+        if not (pl <= el["x"] and el["x"] + el["width"] <= pr and pt <= el["y"] and el["y"] + el["height"] <= pb):
+            return {"success": False,
+                    "error": (f"element ({el['x']},{el['y']} {el['width']}x{el['height']}) falls outside the "
+                              f"'{face}' panel safe box (x {pl}–{pr}, y {pt}–{pb}). Move it or narrow the width.")}
+        hit = github_store.first_collision(el, design)
+        if hit:
+            return {"success": False, "error": f"element would overlap existing element '{hit}'. Reposition it."}
+
+        design.setdefault("elements", []).append(el)
+        meta = await store.put_design(
+            design, label=label or f"{found['label']} +text",
+            product_id=found["product_id"], source_title=found["source_title"],
+        )
+        return {
+            "success": True,
+            "design_id": meta["design_id"],
+            "element_id": el["id"],
+            "face": face.lower(),
+            "placed": {"x": el["x"], "y": el["y"], "width": el["width"], "height": el["height"]},
+            "from_design_id": design_id,
         }
 
     return await _run_github(npub, op)
