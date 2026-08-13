@@ -452,9 +452,21 @@ class GitHubStore:
     async def _get_file(self, client: httpx.AsyncClient, path: str) -> bytes | None:
         data = await self._req(client, "GET", f"/repos/{self.owner}/{self.repo}/contents/{path}"
                                f"?ref={self.branch}", allow_404=True)
-        if not data or "content" not in data:
+        if not data:
             return None
-        return base64.b64decode(data["content"])
+        if data.get("encoding") == "base64" and data.get("content"):
+            return base64.b64decode(data["content"])
+        # The Contents API returns EMPTY content for files over ~1 MB (a design's
+        # background image is bigger than that), so fetch the git blob by sha — the
+        # Blobs API serves base64 up to 100 MB. Without this the artwork comes back
+        # as an empty data: URI and the applied design loses its background.
+        sha = data.get("sha")
+        if not sha:
+            return None
+        blob = await self._req(client, "GET", f"/repos/{self.owner}/{self.repo}/git/blobs/{sha}")
+        if blob and blob.get("encoding") == "base64" and blob.get("content") is not None:
+            return base64.b64decode(blob["content"])
+        return None
 
     async def _list_dir(self, client: httpx.AsyncClient, path: str) -> list[dict[str, Any]]:
         data = await self._req(client, "GET", f"/repos/{self.owner}/{self.repo}/contents/{path}"

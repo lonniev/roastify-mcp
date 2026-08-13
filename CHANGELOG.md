@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Applied designs lost their background image.** GitHub's Contents API returns EMPTY content for
+  files over ~1 MB, and a design's background artwork is ~1.7 MB — so `fetch_design` re-inlined it
+  as an empty `data:image/png;base64,` and the applied design came back with no background.
+  `_get_file` now falls back to the Git Blobs API (base64 up to 100 MB) by sha whenever the Contents
+  API returns no content, recovering the full image. Affected every real design (they all carry a
+  full-bleed background over 1 MB).
+
 ### Added
 
 - **Element creation + panel geometry (Phases 2–3 of Scout's Design-Shuttle task).**

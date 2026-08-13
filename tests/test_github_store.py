@@ -139,6 +139,32 @@ def test_from_spec_rejects_bad_repo():
         gs.GitHubStore.from_spec("tok", "not-a-repo")
 
 
+@respx.mock
+async def test_get_file_small_uses_contents_api():
+    store = gs.GitHubStore("tok", "owner", "repo", "main")
+    respx.get(url__regex=r"contents/designs/x/meta\.json").mock(
+        return_value=httpx.Response(200, json={
+            "encoding": "base64", "content": base64.b64encode(b'{"a":1}').decode()}))
+    async with httpx.AsyncClient() as client:
+        assert await store._get_file(client, "designs/x/meta.json") == b'{"a":1}'
+
+
+@respx.mock
+async def test_get_file_large_falls_back_to_blob_api():
+    # GitHub's Contents API returns EMPTY content for files >1MB (encoding "none");
+    # _get_file must then fetch the git blob by sha, or the artwork comes back empty.
+    store = gs.GitHubStore("tok", "owner", "repo", "main")
+    payload = b"\x89PNG\r\n\x1a\n" + b"pixels" * 300_000    # ~1.8MB
+    respx.get(url__regex=r"contents/assets/big\.png").mock(
+        return_value=httpx.Response(200, json={"encoding": "none", "content": "", "sha": "blob1"}))
+    respx.get(url__regex=r"git/blobs/blob1").mock(
+        return_value=httpx.Response(200, json={
+            "encoding": "base64", "content": base64.b64encode(payload).decode()}))
+    async with httpx.AsyncClient() as client:
+        got = await store._get_file(client, "assets/big.png")
+    assert got == payload    # full image recovered, not an empty string
+
+
 # ---------------------------------------------------------------------------
 # font repair — undo Roastify's lossy migration
 # ---------------------------------------------------------------------------
