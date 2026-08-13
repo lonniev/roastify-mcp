@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **BLUF operating model in the server instructions** — the FastMCP `instructions` now lead with a
+  bottom-line-up-front summary of the unusual operating model so any connected agent understands it
+  without a pasted brief: two capabilities (catalog reads + a per-patron design library), the hard
+  boundary (no product creation or design-write from the MCP — the browser courier does the
+  session-bound ends), the branded-variant workflow (get_design_text → interview → update_design_text
+  → courier applies), and the rule to never fetch_design for editing (it carries the ~2.3MB image).
+
+### Added
+
 - **Field-level design editing** — two npub-scoped tools that let an agent generate a branded
   product variant in conversation without moving the artwork. `get_design_text(design_id)` returns
   a stored design's text layers only (id + current text + font, no images), so it stays small
