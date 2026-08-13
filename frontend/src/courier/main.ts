@@ -194,6 +194,19 @@ function main(): void {
     ($("send") as HTMLButtonElement).disabled = true;
     log("sending login DM…");
     try {
+      // DIAG: raw reachability probe — distinguishes a network/CORS failure from
+      // an MCP-SDK/streaming failure before we blame the wrong layer.
+      try {
+        const probe = await fetch("https://roastify.tollbooth-dpyc.com/mcp", {
+          method: "POST",
+          headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "c", version: "0" } } }),
+        });
+        log("probe: MCP reachable (HTTP " + probe.status + ")");
+      } catch (pe) {
+        log("probe: raw MCP fetch FAILED — " + (pe as Error).name + ": " + (pe as Error).message);
+      }
+
       const r = await requestNpubProof(
         npub, location.origin, `You requested to log in to Roastify (${location.host}).`,
       );
@@ -203,7 +216,7 @@ function main(): void {
       $("await").style.display = "block";
       log("DM sent. Reply to it, then tap confirm.");
     } catch (e) {
-      log("✗ " + (e as Error).message);
+      log("✗ " + (e as Error).name + ": " + (e as Error).message);
     } finally {
       ($("send") as HTMLButtonElement).disabled = false;
     }
