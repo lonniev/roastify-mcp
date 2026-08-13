@@ -22,11 +22,13 @@ _BIG_IMG = "data:image/png;base64," + ("A" * 80_000)   # decodes+re-encodes cano
 _SMALL_SVG = "data:image/svg+xml;base64," + ("B" * 400)
 DESIGN: dict[str, Any] = {
     "schema": "konva-v1",
+    "sheet": {"width": 3900, "height": 5700},
     "elements": [
-        {"type": "image", "id": "bg", "src": _BIG_IMG},
-        {"type": "image", "id": "ic", "src": _SMALL_SVG},
+        {"type": "image", "id": "bg", "x": 0, "y": 0, "width": 3900, "height": 5700, "src": _BIG_IMG},
+        {"type": "shape", "id": "sc", "name": "roast-scale", "x": 100, "y": 200, "width": 300, "height": 40},
+        {"type": "image", "id": "ic", "x": 50, "y": 50, "width": 120, "height": 120, "src": _SMALL_SVG},
         {"type": "text", "id": "t1", "fontFamily": "Poppins", "fontSize": 63,
-         "width": 578, "height": 77, "text": "Ethiopia"},
+         "x": 500, "y": 900, "width": 578, "height": 77, "text": "Ethiopia"},
     ],
 }
 
@@ -56,6 +58,22 @@ def test_text_layers_carries_geometry():
     assert [(x["id"], x["text"]) for x in layers] == [("t1", "Ethiopia")]
     assert layers[0]["chars"] == len("Ethiopia")
     assert layers[0]["fontSize"] == 63 and layers[0]["width"] == 578
+    assert layers[0]["x"] == 500 and layers[0]["y"] == 900   # position for placement
+
+
+def test_non_text_elements_lists_shapes_and_images_with_bounds():
+    els = gs.non_text_elements(DESIGN)
+    by = {e["id"]: e for e in els}
+    assert set(by) == {"bg", "sc", "ic"}          # every non-text element, no text
+    assert by["sc"]["type"] == "shape" and by["sc"]["name"] == "roast-scale"
+    assert by["sc"]["x"] == 100 and by["sc"]["width"] == 300
+    assert "src" not in by["bg"]                   # read-only bounds, not the bytes
+    assert all(e["type"] != "text" for e in els)
+
+
+def test_sheet_size():
+    assert gs.sheet_size(DESIGN) == {"width": 3900, "height": 5700}
+    assert gs.sheet_size({}) == {"width": None, "height": None}
 
 
 def test_apply_text_edits_changes_only_named_layers():
