@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Design library now lives in a GitHub repo the patron owns, not the operator's Neon.** The MCP
+  is the broker: it holds a vaulted fine-grained GitHub token (new optional patron credential
+  fields `github_token` / `github_repo` / `github_branch`) and commits/reads on the patron's
+  behalf. The tool surface (`stash`/`fetch`/`list`/`delete`/`get_design_text`/`update_design_text`)
+  and the browser courier are unchanged. Why: git is content-addressed, so a design's heavy
+  artwork is de-duplicated across variants for free (no hand-rolled asset table); every save is a
+  commit, so there is real version history and rollback; the patron owns the store and can browse,
+  rename, and delete designs in GitHub's own UI (the management surface the courier alone used to
+  be); and a design is a readable folder — `designs/<id>/{design.json, content.json, meta.json}`
+  plus shared `assets/<sha>.<ext>` — rather than a 2.3 MB row. Writes are single atomic commits via
+  the Git Data API; large inline images are lifted to asset files while small SVGs stay inline so
+  `design.json` diffs cleanly. Retires `design_store` (Neon) and its schema.
+
+### Changed
+
 - **Acted on first-live-run field notes (design shuttle).** The instruction text now reframes the
   read-only-API boundary as tool-scoped, not the endeavour: the *merchant is the orchestrator* —
   they create products, change plan tier, and author templates, so an agent should design for what
