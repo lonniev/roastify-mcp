@@ -44,20 +44,34 @@ mcp = FastMCP(
         "Lightning micropayments.\n\n"
         "## Operating model (BLUF)\n"
         "You do two things: read this merchant's Roastify catalog, and keep a "
-        "private per-patron design LIBRARY. You CANNOT create Roastify products "
-        "or write a design onto Roastify — that needs the merchant's browser "
-        "session, which lives only in a companion 'courier' tool the human runs "
-        "on merchant.roastify.app. Division of labor: the human+courier stash a "
-        "product's design up into the library and apply a finished design back "
-        "onto a product; YOU read catalog facts and edit a design's TEXT.\n"
-        "To make a branded variant of a saved design (e.g. a new single-origin): "
+        "private per-patron design LIBRARY. The Roastify API is read-only for "
+        "products and design-write is browser-session-bound — but that is the "
+        "shape of the TOOLS, not of the work. The merchant is the orchestrator: "
+        "they create products in Roastify and Shopify, change plan tier, and "
+        "author templates in Design Studio whenever the work calls for it. Design "
+        "for what the merchant wants to BUILD, not for what their current catalog "
+        "already holds; when a variant needs a product or plan that doesn't exist "
+        "yet, say so plainly and keep going — don't treat it as a blocker or "
+        "quietly narrow the work to fit.\n"
+        "Division of labor: a companion 'courier' the human runs on "
+        "merchant.roastify.app does the two session-bound steps — stash a "
+        "product's design up into the library, and apply a finished design back "
+        "onto a product. YOU read catalog facts and edit a design's TEXT.\n"
+        "To make a branded variant of a saved design: "
         "`roastify_get_design_text(design_id)` to see the editable text layers → "
-        "interview the human (and read `roastify_get_catalog_product` for facts) → "
+        "interview the human (read `roastify_get_catalog_product` for facts) → "
         "`roastify_update_design_text(design_id, edits={layer_id: text})` to save a "
-        "NEW design → tell the human to apply it onto the new product with the "
-        "courier. NEVER call `roastify_fetch_design` to edit: it carries a ~2.3MB "
-        "inline image and is for the courier, not for reasoning — the field tools "
-        "carry text only.\n\n"
+        "NEW design → tell the human to apply it onto the product with the courier. "
+        "NEVER call `roastify_fetch_design` to edit: it carries a ~2.3MB inline "
+        "image and is the courier's, not yours — the field tools carry text only.\n"
+        "Two disciplines that save the merchant a manual pass: the text box does "
+        "not resize, so keep each replacement within roughly ±10% of the character "
+        "count of the text it replaces (`get_design_text` reports each layer's "
+        "`chars`, `fontSize`, and `width`); and a stash label states INTENT, not "
+        "content — a design labeled for one coffee may still hold a donor "
+        "template's words, so read the layers, don't trust the name. A "
+        "`tool_not_priced` error means a tool isn't registered yet, not that the "
+        "patron owes anything — report it and stop; don't offer to fix pricing.\n\n"
         "## Bring your own Roastify key\n"
         "Every patron uses their own Roastify API key. Roastify scopes the "
         "catalog, saved designs, and plan tier to the account behind the key, "
@@ -451,6 +465,11 @@ async def get_my_product(product_id: str, npub: _NPUB = "",
                          dpop_token: str = "") -> dict[str, Any]:
     """Get one of your saved product designs in full, with all its variants.
 
+    The coffee's IDENTITY (which blend) is not a named field — it is encoded in the
+    variant SKU, e.g. `COF-WHB-12O-HGL-BOX` → `HGL` → the High Lakes blend. Decode
+    the SKU before writing origin/roast copy: a product's title can say one thing
+    while its SKU is really a different blend.
+
     Args:
         product_id: Your product id from list_my_products.
     """
@@ -663,12 +682,19 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
                           dpop_token: str = "") -> dict[str, Any]:
     """List the editable text layers of a stored design — the fields you can change.
 
-    Returns each text layer's id, its current text, and its font — but NOT the
-    design's images, so it stays small enough to reason over in a conversation.
-    Each layer's current text is its own label: infer its role (product name,
-    tagline, story, recipe, tasting notes, …) from the words it holds. The same
-    name often appears in several layers and inside longer blurbs; change every id
-    that should carry it.
+    Returns each text layer's id, current text, `chars` (its length), font, and box
+    geometry (`fontSize`, `width`, `height`) — but NOT the design's images, so it
+    stays small enough to reason over in a conversation. Each layer's current text
+    is its own label: infer its role (product name, tagline, story, recipe, tasting
+    notes, …) from the words it holds. The same name often appears in several layers
+    and inside longer blurbs; change every id that should carry it.
+
+    Two things to respect:
+    - A stash label states INTENT, not content: a design labeled for one coffee may
+      still hold a donor template's words. Trust these layers, not the label.
+    - The text box does not resize. Keep each replacement within roughly ±10% of the
+      layer's `chars`; longer copy overflows and the merchant must fix it by hand.
+      `fontSize`/`width` help you gauge how tight a layer is.
 
     Pair with roastify_update_design_text to save your changes.
 
@@ -710,6 +736,10 @@ async def update_design_text(
     patron) then apply onto a product with the browser courier. Only the words
     change — fonts, layout, and images are preserved, and the heavy image is never
     moved (the new design references the same content-addressed assets).
+
+    The box does not resize, so keep each new text within roughly ±10% of the
+    character count of the layer it replaces (see `chars` from get_design_text);
+    longer copy overflows and the merchant fixes it by hand.
 
     Args:
         design_id: The design to edit, from roastify_list_designs.

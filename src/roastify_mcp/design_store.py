@@ -245,21 +245,29 @@ async def get_design(vault: Any, npub: str, design_id: str) -> dict[str, Any] | 
 
 
 def text_layers(design: Any) -> list[dict[str, Any]]:
-    """List every text layer as {id, text, fontFamily, fontWeight, face}.
+    """List every text layer with its content, font, and box geometry.
 
     Each layer's own current text is its label — infer its role (title, quote,
-    recipe…) from that; the design is the schema, nothing is hardcoded.
+    recipe…) from that; the design is the schema, nothing is hardcoded. Geometry
+    (fontSize + box width/height) is included so an editor can judge how much
+    replacement text will fit: the box does not resize, so overly long copy
+    overflows. ``chars`` is the current length, the anchor to write near.
     """
     out: list[dict[str, Any]] = []
 
     def walk(node: Any) -> None:
         if isinstance(node, dict):
             if node.get("type") == "text" and node.get("id"):
+                text = node.get("text", "")
                 out.append({
                     "id": node["id"],
-                    "text": node.get("text", ""),
+                    "text": text,
+                    "chars": len(text),
                     "fontFamily": node.get("fontFamily"),
                     "fontWeight": node.get("fontWeight"),
+                    "fontSize": node.get("fontSize"),
+                    "width": node.get("width"),
+                    "height": node.get("height"),
                     "face": node.get("faceId") or node.get("face"),
                 })
             for v in node.values():

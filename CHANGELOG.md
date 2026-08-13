@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Acted on first-live-run field notes (design shuttle).** The instruction text now reframes the
+  read-only-API boundary as tool-scoped, not the endeavour: the *merchant is the orchestrator* —
+  they create products, change plan tier, and author templates, so an agent should design for what
+  the merchant wants to build, not narrow the work to the current catalog. Added two editing
+  disciplines to the intent and the tool docs: keep replacement text within ~±10% of the layer's
+  character count (the box doesn't resize), and a stash label states intent, not content (read the
+  layers, don't trust the name). Noted that `tool_not_priced` is a registration gap, not a patron
+  debt. `get_design_text` now returns per-layer `chars`, `fontSize`, `width`, and `height` so an
+  editor can gauge fit. `get_my_product`'s description notes the coffee identity is SKU-encoded
+  (decode before writing origin copy). Feedback from Scout's first agent-side run.
+
 ### Added
 
 - **BLUF operating model in the server instructions** — the FastMCP `instructions` now lead with a

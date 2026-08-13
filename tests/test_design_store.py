@@ -167,6 +167,9 @@ def test_text_layers_lists_only_text_with_ids():
     layers = ds.text_layers(DESIGN)
     assert [(x["id"], x["text"]) for x in layers] == [("t1", "Ethiopia")]
     assert layers[0]["fontFamily"] == "Poppins"
+    # geometry carried for length discipline; chars is the current length
+    assert layers[0]["chars"] == len("Ethiopia")
+    assert "fontSize" in layers[0] and "width" in layers[0] and "height" in layers[0]
 
 
 def test_apply_text_edits_changes_only_named_layers():
