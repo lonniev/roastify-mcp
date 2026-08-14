@@ -117,6 +117,8 @@ export interface ProofResult { dpop_token?: string; error?: string }
 export interface StoredDesignMeta {
   design_id: string; label: string; product_id: string; source_title: string;
   bytes: number; updated_at?: string;
+  // Git traceability (present when the store could resolve the latest commit).
+  path?: string; sha?: string; short_sha?: string; commit_url?: string;
 }
 
 // The small set of calls the courier makes. Authed calls carry the stored

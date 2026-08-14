@@ -253,6 +253,24 @@ async def test_get_file_large_falls_back_to_blob_api():
     assert got == payload    # full image recovered, not an empty string
 
 
+@respx.mock
+async def test_latest_commit_maps_sha_and_url():
+    store = gs.GitHubStore("tok", "owner", "repo", "main")
+    respx.get(url__regex=r"/commits\?").mock(return_value=httpx.Response(200, json=[
+        {"sha": "abc123def456", "html_url": "https://github.com/owner/repo/commit/abc123def456"}]))
+    async with httpx.AsyncClient() as client:
+        c = await store._latest_commit(client, "designs/x/meta.json")
+    assert c == {"sha": "abc123def456", "url": "https://github.com/owner/repo/commit/abc123def456"}
+
+
+@respx.mock
+async def test_latest_commit_is_none_when_absent():
+    store = gs.GitHubStore("tok", "owner", "repo", "main")
+    respx.get(url__regex=r"/commits\?").mock(return_value=httpx.Response(200, json=[]))
+    async with httpx.AsyncClient() as client:
+        assert await store._latest_commit(client, "designs/gone/meta.json") is None
+
+
 # ---------------------------------------------------------------------------
 # font repair — undo Roastify's lossy migration
 # ---------------------------------------------------------------------------
@@ -353,6 +371,12 @@ class FakeGitHubStore(gs.GitHubStore):
         self.commits += 1
         return f"sha{self.commits}"
 
+    async def _latest_commit(self, client: Any, path: str) -> dict[str, str] | None:  # type: ignore[override]
+        # Offline double: a stable commit handle so list_designs stays network-free.
+        if path not in self.files:
+            return None
+        return {"sha": f"commit{self.commits}", "url": f"https://github.com/owner/repo/commit/commit{self.commits}"}
+
 
 async def test_put_then_get_roundtrips_the_full_design():
     r = FakeGitHubStore()
@@ -409,6 +433,11 @@ async def test_list_newest_first_then_delete():
     ids = {d["design_id"] for d in listed}
     assert ids == {a["design_id"], b["design_id"]}
     assert "skeleton" not in listed[0]        # metadata only
+    # git traceability surfaced for each entry
+    row = listed[0]
+    assert row["path"] == f"designs/{row['design_id']}/"
+    assert row["sha"] and row["short_sha"] == row["sha"][:7]
+    assert row["commit_url"].startswith("https://github.com/owner/repo/commit/")
     assert await r.delete_design(a["design_id"]) is True
     assert await r.delete_design(a["design_id"]) is False   # already gone
     assert not any(p.startswith(f"designs/{a['design_id']}/") for p in r.files)
