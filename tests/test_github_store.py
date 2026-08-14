@@ -142,6 +142,31 @@ def test_edit_geometry_reports_unknown_ids():
     assert changed == 1 and missing == ["nope"]
 
 
+def test_edit_geometry_translates_line_endpoints():
+    # A line carries its geometry in absolute x1/y1/x2/y2 (and points), not x/y —
+    # shifting x/y alone would leave the drawn line behind.
+    d = {"elements": [{"type": "shape", "shape": "line", "id": "ln",
+                       "x": 100, "y": 200, "width": 3, "height": 90,
+                       "x1": 100, "y1": 200, "x2": 100, "y2": 290,
+                       "points": [100, 200, 100, 290]}]}
+    changed, missing = gs.edit_geometry(d, [{"ids": ["ln"], "dx": 10, "dy": -5}])
+    assert (changed, missing) == (1, [])
+    ln = d["elements"][0]
+    assert (ln["x"], ln["y"]) == (110, 195)
+    assert (ln["x1"], ln["y1"], ln["x2"], ln["y2"]) == (110, 195, 110, 285)
+    assert ln["points"] == [110, 195, 110, 285]
+
+
+def test_edit_geometry_absolute_set_moves_line_endpoints_too():
+    d = {"elements": [{"type": "shape", "shape": "line", "id": "ln",
+                       "x": 100, "y": 200, "width": 3, "height": 90,
+                       "x1": 100, "y1": 200, "x2": 100, "y2": 290}]}
+    gs.edit_geometry(d, [{"id": "ln", "x": 130}])   # implied dx=+30
+    ln = d["elements"][0]
+    assert ln["x"] == 130 and ln["x1"] == 130 and ln["x2"] == 130
+    assert ln["y1"] == 200 and ln["y2"] == 290       # y untouched
+
+
 def test_apply_text_edits_changes_only_named_layers():
     d = json.loads(json.dumps(DESIGN))
     assert gs.apply_text_edits(d, {"t1": "Colombia", "nope": "x"}) == 1
