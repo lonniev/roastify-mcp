@@ -17,12 +17,13 @@ Run locally:
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from typing import Annotated, Any
 
 from fastmcp import FastMCP
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.credential_validators import validate_btcpay_creds
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
@@ -455,6 +456,37 @@ _NPUB = Annotated[
 ]
 
 
+def coerce_str_dict(value: Any) -> dict[str, str]:
+    """Normalize a ``{str: str}`` tool arg that may arrive as a JSON object string.
+
+    FastMCP/Pydantic validate tool arguments with ``validate_python``. Some MCP
+    clients (and intermediate serializers) pass object-shaped parameters as a
+    JSON string rather than a real dict — and that path used to fail schema
+    validation for multi-key ``edits`` while a native dict succeeded. Accept
+    either form so a batched text edit is one call / one commit.
+    """
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return {}
+        try:
+            value = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"edits must be a JSON object {{layer_id: new_text}}, got invalid JSON: {exc}"
+            ) from exc
+    if not isinstance(value, dict):
+        # ValueError (not TypeError): Pydantic BeforeValidator folds ValueError
+        # into ValidationError so FastMCP returns a schema error, not a crash.
+        raise ValueError("edits must be a {layer_id: new_text} map")  # noqa: TRY004
+    return {str(k): str(v) for k, v in value.items()}
+
+
+# Keeps the published JSON schema as ``object`` (additionalProperties: string)
+# while still accepting a JSON-encoded object string at validation time.
+_STR_DICT = Annotated[dict[str, str], BeforeValidator(coerce_str_dict)]
+
+
 @tool
 @runtime.paid_tool(BROWSE_CATALOG_UUID)
 async def browse_catalog(npub: _NPUB = "", dpop_token: str = "") -> dict[str, Any]:
@@ -830,7 +862,7 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
 @runtime.paid_tool(UPDATE_DESIGN_TEXT_UUID)
 async def update_design_text(
     design_id: str,
-    edits: dict[str, str],
+    edits: _STR_DICT,
     label: str = "",
     npub: _NPUB = "",
     dpop_token: str = "",
@@ -851,12 +883,14 @@ async def update_design_text(
         design_id: The design to edit, from roastify_list_designs.
         edits: A map of {layer_id: new_text}, using ids from roastify_get_design_text.
             Include every layer that should change, including ones that repeat a
-            value or embed it in a longer blurb.
+            value or embed it in a longer blurb. A JSON object string is also
+            accepted (some MCP clients serialize object args that way).
         label: Rename the design (optional). Defaults to keeping its current label.
     """
     if not design_id:
         return {"success": False, "error": "design_id is required"}
-    edit_map = {str(k): str(v) for k, v in (edits or {}).items()}
+    # `edits` is already coerced to dict[str, str] by _STR_DICT / coerce_str_dict.
+    edit_map = dict(edits or {})
     if not edit_map:
         return {"success": False, "error": "edits must be a non-empty {layer_id: new_text} map"}
 
