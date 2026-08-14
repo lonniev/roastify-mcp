@@ -570,7 +570,11 @@ class GitHubStore:
     async def put_design(self, design: dict[str, Any], *, design_id: str = "", label: str = "",
                          product_id: str = "", source_title: str = "",
                          repair: bool = False) -> dict[str, Any]:
-        did = design_id or f"{_slug(label or source_title)}-{uuid.uuid4().hex[:6]}"
+        # The store is configuration management: a design's identity is the slug of
+        # its label, so re-stashing or editing the same design commits a new version
+        # of the SAME folder rather than spawning a `<slug>-<hash>` sibling. Two
+        # genuinely different designs simply need different labels.
+        did = design_id or _slug(label or source_title) or uuid.uuid4().hex[:12]
         # Repair the lossy fonts[] Roastify's schema migration leaves behind, so
         # the stored design renders in its intended fonts (idempotent for a design
         # that is already correct).

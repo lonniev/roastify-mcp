@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The design store is now configuration management.** Editing a design
+  (`update_design_text`, `add_design_element`, `move_elements`) commits a new version
+  of the **same** `design_id` — git tracks the diff — instead of saving a new file;
+  the suffix labels (" (edited)", " +text", " (aligned)") are gone. A design's folder
+  id is the deterministic slug of its label (no random `-<hash>`), so re-stashing the
+  same design overwrites its folder rather than spawning a duplicate. Two genuinely
+  different designs just need different labels.
+
 ### Added
 
 - **`roastify_move_elements` — shift a group of layers as one object, and/or resize

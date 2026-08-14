@@ -329,6 +329,26 @@ async def test_put_then_get_roundtrips_the_full_design():
     assert got["label"] == "Ethiopia"
 
 
+async def test_put_id_is_the_label_slug_and_re_put_commits_in_place():
+    r = FakeGitHubStore()
+    a = await r.put_design(DESIGN, label="Ethiopian SO — Light")
+    assert a["design_id"] == "ethiopian-so-light"          # deterministic slug, no hash
+    variant = json.loads(json.dumps(DESIGN))
+    variant["elements"][3]["text"] = "Colombia"
+    b = await r.put_design(variant, label="Ethiopian SO — Light")
+    assert b["design_id"] == a["design_id"]                # same folder — a new version, not a sibling
+    dirs = {p.split("/")[1] for p in r.files if p.startswith("designs/")}
+    assert dirs == {"ethiopian-so-light"}                  # exactly one design folder
+
+
+async def test_put_with_explicit_design_id_overwrites_that_folder():
+    r = FakeGitHubStore()
+    await r.put_design(DESIGN, design_id="canonical", label="whatever the label")
+    assert "designs/canonical/design.json" in r.files
+    dirs = {p.split("/")[1] for p in r.files if p.startswith("designs/")}
+    assert dirs == {"canonical"}                            # label did not spawn a slug folder
+
+
 async def test_image_is_stored_once_across_variants():
     r = FakeGitHubStore()
     await r.put_design(DESIGN, label="v1")
