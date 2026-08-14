@@ -174,6 +174,44 @@ def test_apply_text_edits_changes_only_named_layers():
     assert d["elements"][0]["src"] == _BIG_IMG   # image untouched
 
 
+def test_reflowed_height_holds_exact_when_line_count_unchanged():
+    # same line count (both one line) → keep the renderer's exact prior height,
+    # no drift from the estimator's absolute imprecision.
+    assert gs.reflowed_height(77, ("Ethiopia", 63, 578), ("Colombia", 63, 578)) == 77
+
+
+def test_reflowed_height_scales_with_line_count():
+    # one line → two lines roughly doubles the prior height (anchored on 77).
+    two_lines = "Ethiopia natural heirloom"  # 25 chars → wraps to 2 lines at 63/578
+    h = gs.reflowed_height(77, ("Ethiopia", 63, 578), (two_lines, 63, 578))
+    assert 140 < h < 165
+
+
+def test_apply_text_edits_remeasures_height():
+    d = json.loads(json.dumps(DESIGN))
+    long_copy = "Ethiopia washed heirloom natural sun-dried single-origin lot"
+    gs.apply_text_edits(d, {"t1": long_copy})
+    t1 = gs.text_layers(d)[0]
+    assert t1["height"] > 77          # grew with the longer copy
+    assert t1["width"] == 578         # wrap frame held
+
+
+def test_edit_geometry_sets_fontsize_on_text_and_derives_height():
+    d = json.loads(json.dumps(DESIGN))
+    changed, missing = gs.edit_geometry(d, [{"id": "t1", "fontSize": 126, "height": 9999}])
+    t1 = gs.find_element(d, "t1")
+    assert changed == 1 and missing == []
+    assert t1["fontSize"] == 126
+    assert t1["height"] != 9999 and t1["height"] > 77   # derived, not the passed frame
+
+
+def test_edit_geometry_sets_frame_directly_on_a_rectangle():
+    d = json.loads(json.dumps(DESIGN))
+    gs.edit_geometry(d, [{"id": "sc", "width": 500, "height": 88}])
+    sc = gs.find_element(d, "sc")
+    assert sc["width"] == 500 and sc["height"] == 88   # rectangle: frame set as-is
+
+
 @pytest.mark.parametrize("spec,owner,repo", [
     ("goodbrew/coffee", "goodbrew", "coffee"),
     ("https://github.com/goodbrew/coffee.git", "goodbrew", "coffee"),
