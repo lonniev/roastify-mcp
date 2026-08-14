@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Design library entries carry git traceability** (field report roastify-mcp#35, ask #3).
+  `list_designs` now surfaces each design's repo `path` (`designs/<id>/`) and its latest
+  commit — `sha`, `short_sha`, and `commit_url` — resolved via a path-filtered Commits
+  lookup. The per-design meta + commit reads run concurrently (`asyncio.gather`), so the
+  listing gained the data while getting *faster*, not slower. The courier renders the short
+  SHA as a link through to the commit on GitHub beside the repo path, so a merchant can
+  correlate the chooser against real history and disambiguate near-identical labels.
+  `from_design_id` is intentionally **not** revived: under the CM store the derivation chain
+  is the folder's commit history, which the commit link exposes directly — strictly more than
+  a single pointer. This closes roastify-mcp#35.
 - **Courier Design Chooser: loading, error, and traceability states** (field report
   roastify-mcp#35). The library fetch now shows a spinner + "Loading designs…" row and,
   on failure, a distinguishable error row with a Retry button — the chooser no longer

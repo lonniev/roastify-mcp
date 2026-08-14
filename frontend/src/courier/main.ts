@@ -158,6 +158,8 @@ function main(): void {
       @keyframes sp{to{transform:rotate(360deg)}}
       .item .id{font-size:10px;color:#5f6b64;margin-top:2px;
         font-family:ui-monospace,Menlo,monospace;word-break:break-all}
+      .item .id a.sha{color:#4fbfc0;text-decoration:none}
+      .item .id a.sha:hover{text-decoration:underline}
       #work{flex-direction:column;gap:12px}
       pre{margin:0;background:#0d100f;border:1px solid #2c3432;border-radius:8px;padding:9px;
         font-size:11px;line-height:1.5;max-height:120px;overflow:auto;white-space:pre-wrap;word-break:break-word}
@@ -314,8 +316,25 @@ function main(): void {
       // disambiguator when two labels differ only by a trailing parenthetical.
       const idl = document.createElement("div");
       idl.className = "id";
-      idl.textContent = `designs/${d.design_id}/`;
+      idl.textContent = d.path || `designs/${d.design_id}/`;
       idl.title = "Repo path backing this design";
+      if (d.short_sha) {
+        // The latest commit is this design's version handle — link it through to
+        // GitHub so the merchant can correlate the chooser against real history.
+        idl.append(document.createTextNode(" · "));
+        if (d.commit_url) {
+          const a = document.createElement("a");
+          a.className = "sha";
+          a.href = d.commit_url;
+          a.target = "_blank";
+          a.rel = "noopener";
+          a.textContent = d.short_sha;
+          a.title = "Open this design's latest commit on GitHub";
+          idl.appendChild(a);
+        } else {
+          idl.append(document.createTextNode(d.short_sha));
+        }
+      }
       const ax = document.createElement("div");
       ax.className = "ax";
       const applyBtn = document.createElement("button");

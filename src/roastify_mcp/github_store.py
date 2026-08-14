@@ -28,6 +28,7 @@ always receives a complete, pushable design.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import contextlib
 import hashlib
@@ -592,6 +593,28 @@ class GitHubStore:
                                f"?ref={self.branch}", allow_404=True)
         return data if isinstance(data, list) else []
 
+    async def _latest_commit(self, client: httpx.AsyncClient,
+                             path: str) -> dict[str, str] | None:
+        """The newest commit that touched ``path`` — its sha and GitHub URL, or None.
+
+        Every save is a commit, so a design's latest commit is the handle a merchant
+        uses to correlate the chooser against the repo (and the derivation chain is
+        the folder's commit history, which supersedes the old from_design_id pointer).
+        Best-effort: a lookup failure just omits the sha, never fails the listing.
+        """
+        try:
+            commits = await self._req(
+                client, "GET",
+                f"/repos/{self.owner}/{self.repo}/commits"
+                f"?sha={self.branch}&path={path}&per_page=1",
+            )
+        except GitHubError:
+            return None
+        if isinstance(commits, list) and commits:
+            c = commits[0]
+            return {"sha": str(c.get("sha", "")), "url": str(c.get("html_url", ""))}
+        return None
+
     # -- atomic write (Git Data API): blobs -> tree -> commit -> ref ---------
 
     async def _commit(self, client: httpx.AsyncClient, message: str,
@@ -686,17 +709,31 @@ class GitHubStore:
     async def list_designs(self) -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=60) as client:
             entries = await self._list_dir(client, "designs")
-            out: list[dict[str, Any]] = []
-            for e in entries:
-                if e.get("type") != "dir":
-                    continue
-                meta_raw = await self._get_file(client, f"designs/{e['name']}/meta.json")
+            names = [e["name"] for e in entries if e.get("type") == "dir"]
+
+            async def row(name: str) -> dict[str, Any]:
+                # meta and the latest-commit lookup are independent — run them
+                # together so the listing does not serialize two round-trips per
+                # design (the fetch is already the chooser's slowest moment).
+                meta_raw, commit = await asyncio.gather(
+                    self._get_file(client, f"designs/{name}/meta.json"),
+                    self._latest_commit(client, f"designs/{name}/meta.json"),
+                )
                 meta = json.loads(meta_raw) if meta_raw else {}
-                out.append({
-                    "design_id": e["name"], "label": meta.get("label", ""),
-                    "product_id": meta.get("product_id", ""), "source_title": meta.get("source_title", ""),
+                r: dict[str, Any] = {
+                    "design_id": name, "label": meta.get("label", ""),
+                    "product_id": meta.get("product_id", ""),
+                    "source_title": meta.get("source_title", ""),
                     "updated_at": meta.get("updated_at", ""),
-                })
+                    "path": f"designs/{name}/",
+                }
+                if commit and commit["sha"]:
+                    r["sha"] = commit["sha"]
+                    r["short_sha"] = commit["sha"][:7]
+                    r["commit_url"] = commit["url"]
+                return r
+
+            out = list(await asyncio.gather(*(row(n) for n in names)))
         out.sort(key=lambda d: d.get("updated_at", ""), reverse=True)
         return out
 
