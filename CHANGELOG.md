@@ -20,10 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`roastify_move_elements` — shift a group of layers as one object, and/or resize
-  elements, saved as a new design.** The Design Studio can only move one layer at a
-  time, so a layered spec block drifts out of alignment when its backing shape is
-  moved alone. This relocks it: name the ids and shift them by a common (dx, dy),
-  and separately re-centre/resize individual rectangles, in one edited copy. Pure
+  elements, committing a new version in place.** The Design Studio can only move one
+  layer at a time, so a layered spec block drifts out of alignment when its backing
+  shape is moved alone. This relocks it: name the ids and shift them by a common
+  (dx, dy), and separately re-centre/resize individual rectangles, in one commit. Pure
   helper `github_store.edit_geometry` (group shift or absolute set per edit). Line
   shapes carry absolute endpoints (`x1/y1/x2/y2`, `points`); a shift translates those
   too, so a moved divider line travels with its box instead of staying behind.
@@ -44,8 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `panels` — the box's panel columns recovered from the catalog dieline's `SIDE_LABELS` guide group
   (the saved design only ever says `"sheet"`; there are no panel rectangles in it). New
   `roastify_add_design_element(design_id, face, text, style_from, position, width)` adds a text
-  element to a design and saves the result as a NEW design (source untouched), returning the new
-  design id AND element id. Typography is inherited from an existing layer (`style_from`), position
+  element to a design and commits a new version in place, returning the new element id. Typography
+  is inherited from an existing layer (`style_from`), position
   is absolute `{x,y}` or relative `{below|above|rightOf|leftOf: layer_id, gap}`, and predicted bounds
   come from the read payload's ~1.21·fontSize rule. Placement is REFUSED, not warned: it must fall
   inside the named panel (a conservative default margin, since the dieline has no real safe area —
