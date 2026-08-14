@@ -261,6 +261,70 @@ def apply_text_edits(design: Any, edits: dict[str, str]) -> int:
     return changed
 
 
+def _translate(el: dict[str, Any], dx: float, dy: float) -> None:
+    """Shift an element by (dx, dy), INCLUDING a line's absolute endpoints.
+
+    A ``line`` shape carries its geometry in absolute ``x1/y1/x2/y2`` (and sometimes
+    a flat ``points`` list), NOT in x/y — x/y is only its bounding box. Moving x/y
+    alone leaves the drawn line behind, so the endpoints must travel with it.
+    """
+    el["x"] = float(el.get("x", 0) or 0) + dx
+    el["y"] = float(el.get("y", 0) or 0) + dy
+    for k in ("x1", "x2"):
+        if isinstance(el.get(k), (int, float)):
+            el[k] = float(el[k]) + dx
+    for k in ("y1", "y2"):
+        if isinstance(el.get(k), (int, float)):
+            el[k] = float(el[k]) + dy
+    pts = el.get("points")
+    if isinstance(pts, list) and pts and all(isinstance(p, (int, float)) for p in pts):
+        el["points"] = [float(p) + (dx if i % 2 == 0 else dy) for i, p in enumerate(pts)]
+
+
+def edit_geometry(design: Any, edits: list[dict[str, Any]]) -> tuple[int, list[str]]:
+    """Move and/or resize elements in place. Returns (changed, missing_ids).
+
+    Each edit is one of two shapes:
+      - group shift:  {"ids": [id, ...], "dx": N, "dy": M} — add the delta to every
+        named element's x/y, moving them together as one rigid object. This is the
+        "lock the layers and shift them" the Designer can't do.
+      - absolute set: {"id": id, "x": ?, "y": ?, "width": ?, "height": ?} — set only
+        the keys present (e.g. re-centre and resize a panel rectangle).
+
+    Line endpoints (x1/y1/x2/y2, points) travel with any x/y move — a bare x/y shift
+    would leave the drawn line at its old spot. An unknown id is collected in
+    ``missing`` rather than raising. Only numeric fields are written.
+    """
+    changed = 0
+    missing: list[str] = []
+    for edit in edits or []:
+        if edit.get("ids") is not None:
+            dx, dy = float(edit.get("dx", 0) or 0), float(edit.get("dy", 0) or 0)
+            for eid in edit["ids"]:
+                el = find_element(design, str(eid))
+                if el is None:
+                    missing.append(str(eid))
+                    continue
+                _translate(el, dx, dy)
+                changed += 1
+        elif edit.get("id") is not None:
+            el = find_element(design, str(edit["id"]))
+            if el is None:
+                missing.append(str(edit["id"]))
+                continue
+            # Move by the implied delta first so any line endpoints follow, then
+            # apply the size keys directly.
+            ndx = float(edit["x"]) - float(el.get("x", 0) or 0) if isinstance(edit.get("x"), (int, float)) else 0.0
+            ndy = float(edit["y"]) - float(el.get("y", 0) or 0) if isinstance(edit.get("y"), (int, float)) else 0.0
+            if ndx or ndy:
+                _translate(el, ndx, ndy)
+            for key in ("width", "height"):
+                if isinstance(edit.get(key), (int, float)):
+                    el[key] = float(edit[key])
+            changed += 1
+    return changed, missing
+
+
 # ---------------------------------------------------------------------------
 # font repair — undo Roastify's lossy schema migration on the way in
 # ---------------------------------------------------------------------------
@@ -506,7 +570,11 @@ class GitHubStore:
     async def put_design(self, design: dict[str, Any], *, design_id: str = "", label: str = "",
                          product_id: str = "", source_title: str = "",
                          repair: bool = False) -> dict[str, Any]:
-        did = design_id or f"{_slug(label or source_title)}-{uuid.uuid4().hex[:6]}"
+        # The store is configuration management: a design's identity is the slug of
+        # its label, so re-stashing or editing the same design commits a new version
+        # of the SAME folder rather than spawning a `<slug>-<hash>` sibling. Two
+        # genuinely different designs simply need different labels.
+        did = design_id or _slug(label or source_title) or uuid.uuid4().hex[:12]
         # Repair the lossy fonts[] Roastify's schema migration leaves behind, so
         # the stored design renders in its intended fonts (idempotent for a design
         # that is already correct).

@@ -117,6 +117,56 @@ def test_first_collision_skips_background_flags_content():
     assert gs.first_collision(clear, d) is None
 
 
+def test_edit_geometry_group_shift_moves_together():
+    d = json.loads(json.dumps(DESIGN))
+    changed, missing = gs.edit_geometry(d, [{"ids": ["sc", "t1"], "dx": 10, "dy": -5}])
+    assert (changed, missing) == (2, [])
+    by = {e["id"]: e for e in d["elements"]}
+    assert (by["sc"]["x"], by["sc"]["y"]) == (110, 195)   # 100+10, 200-5
+    assert (by["t1"]["x"], by["t1"]["y"]) == (510, 895)   # 500+10, 900-5
+    assert by["bg"]["x"] == 0 and by["bg"]["y"] == 0       # unnamed element untouched
+
+
+def test_edit_geometry_absolute_set_only_named_keys():
+    d = json.loads(json.dumps(DESIGN))
+    changed, missing = gs.edit_geometry(d, [{"id": "sc", "x": 250, "width": 500}])
+    assert (changed, missing) == (1, [])
+    sc = {e["id"]: e for e in d["elements"]}["sc"]
+    assert sc["x"] == 250 and sc["width"] == 500
+    assert sc["y"] == 200 and sc["height"] == 40           # keys not named are preserved
+
+
+def test_edit_geometry_reports_unknown_ids():
+    d = json.loads(json.dumps(DESIGN))
+    changed, missing = gs.edit_geometry(d, [{"ids": ["sc", "nope"], "dx": 1, "dy": 0}])
+    assert changed == 1 and missing == ["nope"]
+
+
+def test_edit_geometry_translates_line_endpoints():
+    # A line carries its geometry in absolute x1/y1/x2/y2 (and points), not x/y —
+    # shifting x/y alone would leave the drawn line behind.
+    d = {"elements": [{"type": "shape", "shape": "line", "id": "ln",
+                       "x": 100, "y": 200, "width": 3, "height": 90,
+                       "x1": 100, "y1": 200, "x2": 100, "y2": 290,
+                       "points": [100, 200, 100, 290]}]}
+    changed, missing = gs.edit_geometry(d, [{"ids": ["ln"], "dx": 10, "dy": -5}])
+    assert (changed, missing) == (1, [])
+    ln = d["elements"][0]
+    assert (ln["x"], ln["y"]) == (110, 195)
+    assert (ln["x1"], ln["y1"], ln["x2"], ln["y2"]) == (110, 195, 110, 285)
+    assert ln["points"] == [110, 195, 110, 285]
+
+
+def test_edit_geometry_absolute_set_moves_line_endpoints_too():
+    d = {"elements": [{"type": "shape", "shape": "line", "id": "ln",
+                       "x": 100, "y": 200, "width": 3, "height": 90,
+                       "x1": 100, "y1": 200, "x2": 100, "y2": 290}]}
+    gs.edit_geometry(d, [{"id": "ln", "x": 130}])   # implied dx=+30
+    ln = d["elements"][0]
+    assert ln["x"] == 130 and ln["x1"] == 130 and ln["x2"] == 130
+    assert ln["y1"] == 200 and ln["y2"] == 290       # y untouched
+
+
 def test_apply_text_edits_changes_only_named_layers():
     d = json.loads(json.dumps(DESIGN))
     assert gs.apply_text_edits(d, {"t1": "Colombia", "nope": "x"}) == 1
@@ -277,6 +327,26 @@ async def test_put_then_get_roundtrips_the_full_design():
     got = await r.get_design(did)
     assert json.dumps(got["design"], sort_keys=True) == json.dumps(DESIGN, sort_keys=True)
     assert got["label"] == "Ethiopia"
+
+
+async def test_put_id_is_the_label_slug_and_re_put_commits_in_place():
+    r = FakeGitHubStore()
+    a = await r.put_design(DESIGN, label="Ethiopian SO — Light")
+    assert a["design_id"] == "ethiopian-so-light"          # deterministic slug, no hash
+    variant = json.loads(json.dumps(DESIGN))
+    variant["elements"][3]["text"] = "Colombia"
+    b = await r.put_design(variant, label="Ethiopian SO — Light")
+    assert b["design_id"] == a["design_id"]                # same folder — a new version, not a sibling
+    dirs = {p.split("/")[1] for p in r.files if p.startswith("designs/")}
+    assert dirs == {"ethiopian-so-light"}                  # exactly one design folder
+
+
+async def test_put_with_explicit_design_id_overwrites_that_folder():
+    r = FakeGitHubStore()
+    await r.put_design(DESIGN, design_id="canonical", label="whatever the label")
+    assert "designs/canonical/design.json" in r.files
+    dirs = {p.split("/")[1] for p in r.files if p.startswith("designs/")}
+    assert dirs == {"canonical"}                            # label did not spawn a slug folder
 
 
 async def test_image_is_stored_once_across_variants():

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The design store is now configuration management.** Editing a design
+  (`update_design_text`, `add_design_element`, `move_elements`) commits a new version
+  of the **same** `design_id` — git tracks the diff — instead of saving a new file;
+  the suffix labels (" (edited)", " +text", " (aligned)") are gone. A design's folder
+  id is the deterministic slug of its label (no random `-<hash>`), so re-stashing the
+  same design overwrites its folder rather than spawning a duplicate. Two genuinely
+  different designs just need different labels.
+
+### Added
+
+- **`roastify_move_elements` — shift a group of layers as one object, and/or resize
+  elements, committing a new version in place.** The Design Studio can only move one
+  layer at a time, so a layered spec block drifts out of alignment when its backing
+  shape is moved alone. This relocks it: name the ids and shift them by a common
+  (dx, dy), and separately re-centre/resize individual rectangles, in one commit. Pure
+  helper `github_store.edit_geometry` (group shift or absolute set per edit). Line
+  shapes carry absolute endpoints (`x1/y1/x2/y2`, `points`); a shift translates those
+  too, so a moved divider line travels with its box instead of staying behind.
+
 ### Fixed
 
 - **Applied designs lost their background image.** GitHub's Contents API returns EMPTY content for
@@ -23,8 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `panels` — the box's panel columns recovered from the catalog dieline's `SIDE_LABELS` guide group
   (the saved design only ever says `"sheet"`; there are no panel rectangles in it). New
   `roastify_add_design_element(design_id, face, text, style_from, position, width)` adds a text
-  element to a design and saves the result as a NEW design (source untouched), returning the new
-  design id AND element id. Typography is inherited from an existing layer (`style_from`), position
+  element to a design and commits a new version in place, returning the new element id. Typography
+  is inherited from an existing layer (`style_from`), position
   is absolute `{x,y}` or relative `{below|above|rightOf|leftOf: layer_id, gap}`, and predicted bounds
   come from the read payload's ~1.21·fontSize rule. Placement is REFUSED, not warned: it must fall
   inside the named panel (a conservative default margin, since the dieline has no real safe area —

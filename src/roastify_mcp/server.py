@@ -159,6 +159,7 @@ DELETE_DESIGN_UUID       = "45014cff-c156-5f3e-bfea-dfb9131340d9"
 GET_DESIGN_TEXT_UUID     = "2569b7b5-a380-59fa-a60b-32c3666c1e1b"
 UPDATE_DESIGN_TEXT_UUID  = "0acef2a3-c54a-5134-a30b-9a15e01b98d5"
 ADD_DESIGN_ELEMENT_UUID  = "d786f8d9-16a9-5e32-84ed-26edadc10ba9"
+MOVE_ELEMENTS_UUID       = "8b69215b-1d6d-54ad-9e20-14460d123f40"
 
 _DOMAIN_TOOLS = [
     ToolIdentity(
@@ -227,6 +228,10 @@ _DOMAIN_TOOLS = [
     ToolIdentity(
         tool_id=ADD_DESIGN_ELEMENT_UUID, capability="add_design_element", category="write",
         intent="Add a new text element to a stored design, saved as a new design",
+    ),
+    ToolIdentity(
+        tool_id=MOVE_ELEMENTS_UUID, capability="move_elements", category="write",
+        intent="Shift a group of elements together and/or resize elements, saved as a new design",
     ),
 ]
 
@@ -673,8 +678,9 @@ async def stash_design(
         label: Your name for this design, e.g. "Ethiopian — light".
         product_id: The Roastify product id it came from, for your reference.
         source_title: The product's title at stash time, for your reference.
-        design_id: Omit to store a new design; pass an existing id to overwrite
-            that slot.
+        design_id: Optional explicit folder id. Omit and the id is the slug of the
+            label, so re-stashing the same design commits a new version in place
+            instead of creating a duplicate.
     """
     if not isinstance(design, dict) or not design:
         return {"success": False, "error": "design must be a non-empty JSON object"}
@@ -826,12 +832,13 @@ async def update_design_text(
     npub: _NPUB = "",
     dpop_token: str = "",
 ) -> dict[str, Any]:
-    """Apply text edits to a stored design and save the result as a NEW design.
+    """Apply text edits to a stored design and commit a new version of it.
 
-    The original is left untouched; a new design_id is returned, which you (or the
-    patron) then apply onto a product with the browser courier. Only the words
-    change — fonts, layout, and images are preserved, and the heavy image is never
-    moved (the new design references the same content-addressed assets).
+    The store is configuration management: the edit is committed back to the SAME
+    design_id (git tracks the diff), not saved as a new file. Apply it onto a product
+    with the browser courier. Only the words change — fonts, layout, and images are
+    preserved, and the heavy image is never moved (the design keeps referencing the
+    same content-addressed assets).
 
     The box does not resize, so keep each new text within roughly ±10% of the
     character count of the layer it replaces (see `chars` from get_design_text);
@@ -842,8 +849,7 @@ async def update_design_text(
         edits: A map of {layer_id: new_text}, using ids from roastify_get_design_text.
             Include every layer that should change, including ones that repeat a
             value or embed it in a longer blurb.
-        label: A name for the new design, e.g. "Ethiopian SO — light". Defaults to
-            the source label with " (edited)".
+        label: Rename the design (optional). Defaults to keeping its current label.
     """
     if not design_id:
         return {"success": False, "error": "design_id is required"}
@@ -863,15 +869,14 @@ async def update_design_text(
                 "error": "none of those layer ids matched; call roastify_get_design_text for valid ids",
             }
         meta = await store.put_design(
-            skeleton,
-            label=label or f"{found['label']} (edited)",
+            skeleton, design_id=design_id,
+            label=label or found["label"],
             product_id=found["product_id"], source_title=found["source_title"],
         )
         return {
             "success": True,
             "design_id": meta["design_id"],
             "label": meta["label"],
-            "from_design_id": design_id,
             "layers_changed": changed,
         }
 
@@ -897,10 +902,11 @@ async def add_design_element(
     npub: _NPUB = "",
     dpop_token: str = "",
 ) -> dict[str, Any]:
-    """Add a new TEXT element to a design and save the result as a NEW design.
+    """Add a new TEXT element to a design and commit a new version of it.
 
-    The source design is untouched; a new design_id AND the new element's id come
-    back, so you can immediately edit the new text by id with update_design_text.
+    The store is configuration management: the element is committed back to the SAME
+    design_id (git tracks the diff). The new element's id comes back, so you can
+    immediately edit its text by id with update_design_text.
     Placement is validated server-side and REFUSED, not warned: the element must
     fall inside the named panel (with a default margin — the dieline carries no real
     safe area) and must not overlap any existing element (the collider's id is
@@ -919,7 +925,7 @@ async def add_design_element(
             best when there's a sibling to anchor to; an empty panel needs absolute.
         width: The text box (wrap) width in design units. Defaults to the panel
             width minus margins.
-        label: Name for the new design (defaults to the source label + " +text").
+        label: Rename the design (optional). Defaults to keeping its current label.
         client_req_id: Your idempotency key.
     """
     for name, val in (("design_id", design_id), ("face", face), ("text", text), ("style_from", style_from)):
@@ -982,7 +988,7 @@ async def add_design_element(
 
         design.setdefault("elements", []).append(el)
         meta = await store.put_design(
-            design, label=label or f"{found['label']} +text",
+            design, design_id=design_id, label=label or found["label"],
             product_id=found["product_id"], source_title=found["source_title"],
         )
         return {
@@ -991,7 +997,72 @@ async def add_design_element(
             "element_id": el["id"],
             "face": face.lower(),
             "placed": {"x": el["x"], "y": el["y"], "width": el["width"], "height": el["height"]},
-            "from_design_id": design_id,
+        }
+
+    return await _run_github(npub, op)
+
+
+@tool
+@runtime.paid_tool(MOVE_ELEMENTS_UUID)
+async def move_elements(
+    design_id: str,
+    edits: list[dict[str, Any]],
+    label: str = "",
+    npub: _NPUB = "",
+    dpop_token: str = "",
+) -> dict[str, Any]:
+    """Move a group of elements together and/or resize elements; commit a new version.
+
+    The Designer can move only one layer at a time, so a block of layered content
+    (a spec panel, a logo lockup) drifts out of alignment when its backing shape is
+    moved alone. This relocks that block: name the ids and shift them as one rigid
+    object, and separately re-centre or resize individual rectangles. The store is
+    configuration management: the edit is committed back to the SAME design_id (git
+    tracks the diff). Apply it onto the product with the browser courier.
+
+    Nothing is validated against panel bounds here (unlike add_design_element): you
+    are re-aligning existing, deliberately-placed content, so the caller owns the
+    coordinates. The heavy background image is never moved unless you name its id.
+
+    Args:
+        design_id: The design to edit, from roastify_list_designs.
+        edits: A list of geometry edits, each one of:
+            - group shift: {"ids": ["a", "b", ...], "dx": N, "dy": M} — add the same
+              delta to every listed element's x/y (design units; +dy is down, +dx is
+              right). Use this to move a whole block together.
+            - absolute set: {"id": "a", "x": ?, "y": ?, "width": ?, "height": ?} — set
+              only the keys you include, e.g. re-centre and resize one rectangle.
+            Get element ids and their current geometry from roastify_get_design_text.
+        label: Rename the design (optional). Defaults to keeping its current label.
+    """
+    if not design_id:
+        return {"success": False, "error": "design_id is required"}
+    if not isinstance(edits, list) or not edits:
+        return {"success": False, "error": "edits must be a non-empty list of geometry edits"}
+
+    async def op(store: github_store.GitHubStore) -> dict[str, Any]:
+        found = await store.get_skeleton(design_id)
+        if found is None:
+            return {"success": False, "error": f"no design '{design_id}' in your library"}
+        design = found["skeleton"]
+        changed, missing = github_store.edit_geometry(design, edits)
+        if changed == 0:
+            return {
+                "success": False,
+                "error": (f"no elements matched; unknown ids: {missing}. "
+                          "Call roastify_get_design_text for valid ids." if missing
+                          else "edits changed nothing; each edit needs {ids,dx,dy} or {id,x/y/width/height}"),
+            }
+        meta = await store.put_design(
+            design, design_id=design_id, label=label or found["label"],
+            product_id=found["product_id"], source_title=found["source_title"],
+        )
+        return {
+            "success": True,
+            "design_id": meta["design_id"],
+            "label": meta["label"],
+            "elements_changed": changed,
+            "unknown_ids": missing,
         }
 
     return await _run_github(npub, op)
