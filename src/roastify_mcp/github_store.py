@@ -67,10 +67,11 @@ def text_layers(design: Any) -> list[dict[str, Any]]:
 
     Each layer's own current text is its label; geometry lets an editor judge fit
     and placement: ``x``/``y`` are the top-left corner in design units (the sheet
-    origin is its top-left; ``sheet_size`` gives the extent), and ``width``/``height``
-    are the MEASURED text bounds — text does not clip, it grows, so the footprint
-    is a function of line count and longest line, not a fixed frame. ``chars`` is
-    the current length, the anchor to write near.
+    origin is its top-left; ``sheet_size`` gives the extent). ``width`` is the fixed
+    wrap FRAME — text wraps within it and it does not change as copy changes —
+    while ``height`` is the grown extent, a function of line count: edit the text
+    and height re-measures, width holds. ``chars`` is the current length, the anchor
+    to write near.
     """
     out: list[dict[str, Any]] = []
 
@@ -176,6 +177,15 @@ def _bounded_elements(design: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _line_count(text: str, font_size: float, width: float) -> int:
+    """Estimate how many wrapped lines ``text`` occupies in a ``width`` frame."""
+    per_line = max(1, int(width / max(1.0, font_size * 0.5)))
+    lines = 0
+    for para in str(text or "").split("\n"):
+        lines += max(1, -(-len(para) // per_line))  # ceil division
+    return max(1, lines)
+
+
 def estimate_text_height(text: str, font_size: float, width: float) -> int:
     """Predict a text box's height from its content, font size, and wrap width.
 
@@ -183,11 +193,31 @@ def estimate_text_height(text: str, font_size: float, width: float) -> int:
     rough half-em average character width to estimate wrap. Approximate — the
     Designer re-measures exactly on open — but good enough to validate placement.
     """
-    per_line = max(1, int(width / max(1.0, font_size * 0.5)))
-    lines = 0
-    for para in str(text or "").split("\n"):
-        lines += max(1, -(-len(para) // per_line))  # ceil division
-    return round(max(1, lines) * font_size * 1.21)
+    return round(_line_count(text, font_size, width) * font_size * 1.21)
+
+
+def reflowed_height(old_height: Any,
+                    old: tuple[str, float, float],
+                    new: tuple[str, float, float]) -> float:
+    """Re-measure a text box's height after its text, font size, or wrap width
+    changed — anchored on the renderer's exact prior height.
+
+    On a text layer ``width`` is the fixed wrap FRAME and ``height`` is the grown
+    extent. The line estimator is only roughly right in absolute terms (the
+    Designer re-measures exactly on open), so rather than overwrite an exact bound
+    with an approximation, this scales the prior height by the estimator's RELATIVE
+    change. When the modeled line metrics are unchanged the exact height is kept
+    verbatim — an edit that doesn't cross a wrap boundary reports no spurious drift.
+
+    ``old``/``new`` are each ``(text, font_size, width)``.
+    """
+    eo = estimate_text_height(*old)
+    en = estimate_text_height(*new)
+    if not isinstance(old_height, (int, float)) or old_height <= 0 or eo <= 0:
+        return en
+    if en == eo:
+        return old_height
+    return round(old_height * en / eo)
 
 
 def build_text_element(design: Any, *, text: str, style_from: str,
@@ -242,14 +272,25 @@ def first_collision(el: dict[str, Any], design: Any) -> str | None:
 
 
 def apply_text_edits(design: Any, edits: dict[str, str]) -> int:
-    """Set ``.text`` on each text layer whose id is a key in ``edits`` (mutates)."""
+    """Set ``.text`` on each text layer whose id is a key in ``edits`` (mutates).
+
+    Also re-measures the layer's ``height`` for the new copy so the stored bounds
+    describe the design that now exists (``width`` is the fixed wrap frame and is
+    left untouched). Returns the number of layers changed.
+    """
     changed = 0
 
     def walk(node: Any) -> None:
         nonlocal changed
         if isinstance(node, dict):
             if node.get("type") == "text" and node.get("id") in edits:
-                node["text"] = edits[node["id"]]
+                old_text = node.get("text", "")
+                new_text = edits[node["id"]]
+                node["text"] = new_text
+                fs, w = node.get("fontSize"), node.get("width")
+                if isinstance(fs, (int, float)) and isinstance(w, (int, float)):
+                    node["height"] = reflowed_height(
+                        node.get("height"), (old_text, fs, w), (new_text, fs, w))
                 changed += 1
             for v in node.values():
                 walk(v)
@@ -288,12 +329,16 @@ def edit_geometry(design: Any, edits: list[dict[str, Any]]) -> tuple[int, list[s
       - group shift:  {"ids": [id, ...], "dx": N, "dy": M} — add the delta to every
         named element's x/y, moving them together as one rigid object. This is the
         "lock the layers and shift them" the Designer can't do.
-      - absolute set: {"id": id, "x": ?, "y": ?, "width": ?, "height": ?} — set only
-        the keys present (e.g. re-centre and resize a panel rectangle).
+      - absolute set: {"id": id, "x": ?, "y": ?, "width": ?, "height": ?, "fontSize": ?}
+        — set only the keys present (e.g. re-centre and resize a panel rectangle).
 
-    Line endpoints (x1/y1/x2/y2, points) travel with any x/y move — a bare x/y shift
-    would leave the drawn line at its old spot. An unknown id is collected in
-    ``missing`` rather than raising. Only numeric fields are written.
+    Element kind decides what the size keys mean. On a RECTANGLE/line/image, ``width``
+    and ``height`` are the frame and are written directly. On a TEXT layer, ``width``
+    is the wrap frame and ``fontSize`` the type size — both settable — while ``height``
+    is DERIVED (re-measured from the reflowed text); a ``height`` passed for a text
+    layer is ignored. Line endpoints (x1/y1/x2/y2, points) travel with any x/y move —
+    a bare x/y shift would leave the drawn line at its old spot. An unknown id is
+    collected in ``missing`` rather than raising. Only numeric fields are written.
     """
     changed = 0
     missing: list[str] = []
@@ -318,9 +363,19 @@ def edit_geometry(design: Any, edits: list[dict[str, Any]]) -> tuple[int, list[s
             ndy = float(edit["y"]) - float(el.get("y", 0) or 0) if isinstance(edit.get("y"), (int, float)) else 0.0
             if ndx or ndy:
                 _translate(el, ndx, ndy)
-            for key in ("width", "height"):
-                if isinstance(edit.get(key), (int, float)):
-                    el[key] = float(edit[key])
+            if el.get("type") == "text":
+                # width is the wrap frame, fontSize the type size; height is derived.
+                old = (el.get("text", ""), el.get("fontSize") or 0, el.get("width") or 0)
+                for key in ("width", "fontSize"):
+                    if isinstance(edit.get(key), (int, float)):
+                        el[key] = float(edit[key])
+                new = (el.get("text", ""), el.get("fontSize") or 0, el.get("width") or 0)
+                if all(old[1:]) and all(new[1:]):
+                    el["height"] = reflowed_height(el.get("height"), old, new)
+            else:
+                for key in ("width", "height"):
+                    if isinstance(edit.get(key), (int, float)):
+                        el[key] = float(edit[key])
             changed += 1
     return changed, missing
 

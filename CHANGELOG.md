@@ -17,6 +17,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same design overwrites its folder rather than spawning a duplicate. Two genuinely
   different designs just need different labels.
 
+### Fixed
+
+- **`update_design_text` re-measures a text layer's `height` after an edit.** It set
+  the new copy but left `height` (and the response) unchanged, so an agent verifying
+  its own edit read stale bounds and concluded the change hadn't taken, and any later
+  placement reasoning ran on numbers describing a design that no longer existed. Height
+  now re-measures, anchored on the renderer's exact prior value and scaled by the
+  reflowed line count — an edit that doesn't cross a wrap boundary reports no drift.
+  `width` is documented for what it is: the fixed wrap frame, not a measured bound.
+- Both `update_design_text` and `move_elements` now **echo the touched elements'
+  post-edit geometry** in their response, so a caller verifies against ground truth.
+- **Courier strips Roastify's `(copy)` / `(copy revised)` suffix from a stashed
+  design's label.** Roastify stamps that lineage artifact when a design is duplicated
+  in the Designer; the courier was carrying it verbatim into the stash label (and any
+  slug derived from it). `cleanTitle` now peels the trailing `(copy…)` at capture, so
+  the label states the design — not how it was made — whether the design is draft or
+  published.
+
 ### Added
 
 - **`roastify_move_elements` — shift a group of layers as one object, and/or resize
@@ -27,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   helper `github_store.edit_geometry` (group shift or absolute set per edit). Line
   shapes carry absolute endpoints (`x1/y1/x2/y2`, `points`); a shift translates those
   too, so a moved divider line travels with its box instead of staying behind.
+- **`move_elements` accepts `fontSize` on a text layer** (absolute set), reflowing the
+  layer's derived `height` — so matching one label's size to a horizontal peer no
+  longer has to be finished by hand in Design Studio. On a text layer `width` is the
+  wrap frame and `fontSize` the type size (both settable); `height` is derived and a
+  passed `height` is ignored. On a rectangle/line/image, `width`/`height` set the frame
+  directly, as before.
 
 ### Fixed
 

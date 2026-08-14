@@ -78,7 +78,19 @@ function main(): void {
   };
   const idOf = (p: Rec): string =>
     String(p.id ?? p.editProductId ?? p.productId ?? p._id ?? "");
-  const labelOf = (p: Rec): string => String(p.title || p.name || idOf(p));
+  // Roastify stamps " (copy)" / " (copy revised)" / " (copy 2)" onto a design's
+  // title when it is duplicated in the Designer. That is a UI lineage artifact, not
+  // the merchant's intent — strip it so the stash label (and any slug derived from
+  // it) names the design, not how it was made. Loops to peel chained suffixes.
+  const cleanTitle = (s: string): string => {
+    let t = s, prev;
+    do {
+      prev = t;
+      t = t.replace(/\s*\(copy(?:\s+revised)?(?:\s+\d+)?\)\s*$/i, "");
+    } while (t !== prev);
+    return t.trim();
+  };
+  const labelOf = (p: Rec): string => cleanTitle(String(p.title || p.name || "")) || idOf(p);
   const mockupsOf = (p: Rec): string[] => {
     const imgs = p.images as Array<Rec | string> | undefined;
     const raw =

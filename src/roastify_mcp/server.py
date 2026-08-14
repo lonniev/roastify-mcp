@@ -779,9 +779,12 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
     Two things to respect:
     - A stash label states INTENT, not content: a design labeled for one coffee may
       still hold a donor template's words. Trust these layers, not the label.
-    - The text box does not resize. Keep each replacement within roughly ±10% of the
-      layer's `chars`; longer copy overflows and the merchant must fix it by hand.
-      `fontSize`/`width` help you gauge how tight a layer is.
+    - `width` is the fixed wrap frame; `height` is the grown extent and re-measures
+      when you edit the text. Keep each replacement within roughly ±10% of the
+      layer's `chars`; longer copy grows the box downward and can overrun its
+      neighbour, which the merchant then fixes by hand. `fontSize`/`width` gauge how
+      tight a layer is; to change a label's `fontSize` (or its wrap frame), use
+      roastify_move_elements.
 
     Pair with roastify_update_design_text to save your changes.
 
@@ -868,6 +871,18 @@ async def update_design_text(
                 "success": False,
                 "error": "none of those layer ids matched; call roastify_get_design_text for valid ids",
             }
+        # Echo each edited layer's post-edit bounds so the caller can verify the
+        # change landed. height re-measures with the new copy; width is the fixed
+        # wrap frame and so is expected to hold.
+        edited = []
+        for lid in edit_map:
+            el = github_store.find_element(skeleton, lid)
+            if el and el.get("type") == "text":
+                edited.append({
+                    "id": lid, "chars": len(el.get("text", "")),
+                    "width": el.get("width"), "height": el.get("height"),
+                    "fontSize": el.get("fontSize"),
+                })
         meta = await store.put_design(
             skeleton, design_id=design_id,
             label=label or found["label"],
@@ -878,6 +893,7 @@ async def update_design_text(
             "design_id": meta["design_id"],
             "label": meta["label"],
             "layers_changed": changed,
+            "layers": edited,
         }
 
     return await _run_github(npub, op)
@@ -1030,8 +1046,13 @@ async def move_elements(
             - group shift: {"ids": ["a", "b", ...], "dx": N, "dy": M} — add the same
               delta to every listed element's x/y (design units; +dy is down, +dx is
               right). Use this to move a whole block together.
-            - absolute set: {"id": "a", "x": ?, "y": ?, "width": ?, "height": ?} — set
-              only the keys you include, e.g. re-centre and resize one rectangle.
+            - absolute set: {"id": "a", "x": ?, "y": ?, "width": ?, "height": ?,
+              "fontSize": ?} — set only the keys you include. What the size keys mean
+              depends on the element: on a RECTANGLE/line/image, width and height are
+              the frame and set directly; on a TEXT layer, width is the wrap frame and
+              fontSize the type size (both settable) while height is DERIVED — it
+              re-measures from the reflowed text, and a height you pass for a text
+              layer is ignored. Use fontSize to match one label's size to a peer.
             Get element ids and their current geometry from roastify_get_design_text.
         label: Rename the design (optional). Defaults to keeping its current label.
     """
@@ -1053,6 +1074,25 @@ async def move_elements(
                           "Call roastify_get_design_text for valid ids." if missing
                           else "edits changed nothing; each edit needs {ids,dx,dy} or {id,x/y/width/height}"),
             }
+        # Echo the post-edit geometry of every element the edits touched (text
+        # layers report their re-measured height and any new fontSize) so the
+        # caller verifies against ground truth, not stale numbers.
+        touched: list[str] = []
+        for e in edits:
+            if e.get("ids"):
+                touched += [str(i) for i in e["ids"]]
+            elif e.get("id") is not None:
+                touched.append(str(e["id"]))
+        elements = []
+        for tid in dict.fromkeys(touched):
+            el = github_store.find_element(design, tid)
+            if el:
+                elements.append({
+                    "id": tid, "type": el.get("type"),
+                    "x": el.get("x"), "y": el.get("y"),
+                    "width": el.get("width"), "height": el.get("height"),
+                    "fontSize": el.get("fontSize"),
+                })
         meta = await store.put_design(
             design, design_id=design_id, label=label or found["label"],
             product_id=found["product_id"], source_title=found["source_title"],
@@ -1063,6 +1103,7 @@ async def move_elements(
             "label": meta["label"],
             "elements_changed": changed,
             "unknown_ids": missing,
+            "elements": elements,
         }
 
     return await _run_github(npub, op)
