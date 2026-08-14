@@ -149,6 +149,15 @@ function main(): void {
       .item .ax{display:flex;gap:8px;margin-top:9px}
       .item .ax button{flex:1;padding:8px}
       .empty{color:#828d86;font-size:12px;padding:6px 0}
+      .lib .load{color:#4fbfc0;font-size:12px;padding:6px 0}
+      .lib .err{color:#dc8a6f;font-size:12px;padding:6px 0}
+      .lib .err button{margin-top:6px;padding:6px 10px;font-size:12px}
+      .spin{display:inline-block;width:11px;height:11px;border:2px solid #2c3432;
+        border-top-color:#4fbfc0;border-radius:50%;animation:sp .7s linear infinite;
+        vertical-align:-1px;margin-right:6px}
+      @keyframes sp{to{transform:rotate(360deg)}}
+      .item .id{font-size:10px;color:#5f6b64;margin-top:2px;
+        font-family:ui-monospace,Menlo,monospace;word-break:break-all}
       #work{flex-direction:column;gap:12px}
       pre{margin:0;background:#0d100f;border:1px solid #2c3432;border-radius:8px;padding:9px;
         font-size:11px;line-height:1.5;max-height:120px;overflow:auto;white-space:pre-wrap;word-break:break-word}
@@ -294,12 +303,19 @@ function main(): void {
       const nm = document.createElement("div");
       nm.className = "nm";
       nm.textContent = d.label || d.source_title || d.design_id.slice(0, 8);
+      nm.title = d.label || d.source_title || d.design_id;   // full label on hover — the tail isn't lost to wrap
       const mt = document.createElement("div");
       mt.className = "mt";
       const when = d.updated_at ? String(d.updated_at).slice(0, 10) : "";
       const src = d.source_title && d.source_title !== d.label ? `from ${d.source_title}` : "";
       const kb = d.bytes ? `${Math.round(d.bytes / 1024)} KB` : "";
       mt.textContent = [src, when, kb].filter(Boolean).join(" · ");
+      // The design_id is the repo folder backing this entry (designs/<id>/) — a stable
+      // disambiguator when two labels differ only by a trailing parenthetical.
+      const idl = document.createElement("div");
+      idl.className = "id";
+      idl.textContent = `designs/${d.design_id}/`;
+      idl.title = "Repo path backing this design";
       const ax = document.createElement("div");
       ax.className = "ax";
       const applyBtn = document.createElement("button");
@@ -311,20 +327,48 @@ function main(): void {
       delBtn.textContent = "🗑 Delete";
       delBtn.onclick = () => deleteDesign(d);
       ax.append(applyBtn, delBtn);
-      item.append(nm, mt, ax);
+      item.append(nm, mt, idl, ax);
       box.appendChild(item);
     }
   };
 
+  // Replace the list with a single status row — the box is the merchant's only
+  // window on the library, so loading/error must be visible here, not just in the
+  // log. An error row is distinguishable from an empty library and offers a retry.
+  const showLibStatus = (kind: "loading" | "error", text: string) => {
+    const box = $("lib");
+    box.textContent = "";
+    $("libn").textContent = "";
+    const row = document.createElement("div");
+    row.className = kind === "loading" ? "load" : "err";
+    if (kind === "loading") {
+      const s = document.createElement("span");
+      s.className = "spin";
+      row.append(s, document.createTextNode(text));
+    } else {
+      row.textContent = text;
+      const retry = document.createElement("button");
+      retry.className = "alt";
+      retry.textContent = "Retry";
+      retry.onclick = () => void loadLibrary();
+      row.appendChild(retry);
+    }
+    box.appendChild(row);
+  };
+
   const loadLibrary = async () => {
+    showLibStatus("loading", "Loading designs…");
     try {
       const r = await api.list();
-      if (r.success === false) { log("✗ library: " + (r.error || "unavailable")); return; }
+      if (r.success === false) {
+        showLibStatus("error", "Couldn't load your library: " + (r.error || "unavailable"));
+        return;
+      }
       LIBRARY = r.designs || [];
       renderLibrary();
       log(`${LIBRARY.length} design${LIBRARY.length === 1 ? "" : "s"} in your library.`);
     } catch (e) {
-      log("✗ library: " + (e as Error).message);
+      showLibStatus("error", "Couldn't load your library: " + (e as Error).message);
     }
   };
 
