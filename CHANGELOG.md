@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`roastify_move_elements` — shift a group of layers as one object, and/or resize
+  elements, saved as a new design.** The Design Studio can only move one layer at a
+  time, so a layered spec block drifts out of alignment when its backing shape is
+  moved alone. This relocks it: name the ids and shift them by a common (dx, dy),
+  and separately re-centre/resize individual rectangles, in one edited copy. Pure
+  helper `github_store.edit_geometry` (group shift or absolute set per edit).
+
 ### Fixed
 
 - **Applied designs lost their background image.** GitHub's Contents API returns EMPTY content for

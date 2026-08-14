@@ -261,6 +261,44 @@ def apply_text_edits(design: Any, edits: dict[str, str]) -> int:
     return changed
 
 
+def edit_geometry(design: Any, edits: list[dict[str, Any]]) -> tuple[int, list[str]]:
+    """Move and/or resize elements in place. Returns (changed, missing_ids).
+
+    Each edit is one of two shapes:
+      - group shift:  {"ids": [id, ...], "dx": N, "dy": M} — add the delta to every
+        named element's x/y, moving them together as one rigid object. This is the
+        "lock the layers and shift them" the Designer can't do.
+      - absolute set: {"id": id, "x": ?, "y": ?, "width": ?, "height": ?} — set only
+        the keys present (e.g. re-centre and resize a panel rectangle).
+
+    An unknown id is collected in ``missing`` rather than raising, so a caller can
+    report exactly which ids didn't match. Only numeric fields are written.
+    """
+    changed = 0
+    missing: list[str] = []
+    for edit in edits or []:
+        if edit.get("ids") is not None:
+            dx, dy = float(edit.get("dx", 0) or 0), float(edit.get("dy", 0) or 0)
+            for eid in edit["ids"]:
+                el = find_element(design, str(eid))
+                if el is None:
+                    missing.append(str(eid))
+                    continue
+                el["x"] = float(el.get("x", 0) or 0) + dx
+                el["y"] = float(el.get("y", 0) or 0) + dy
+                changed += 1
+        elif edit.get("id") is not None:
+            el = find_element(design, str(edit["id"]))
+            if el is None:
+                missing.append(str(edit["id"]))
+                continue
+            for key in ("x", "y", "width", "height"):
+                if isinstance(edit.get(key), (int, float)):
+                    el[key] = float(edit[key])
+            changed += 1
+    return changed, missing
+
+
 # ---------------------------------------------------------------------------
 # font repair — undo Roastify's lossy schema migration on the way in
 # ---------------------------------------------------------------------------

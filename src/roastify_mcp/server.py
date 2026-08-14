@@ -159,6 +159,7 @@ DELETE_DESIGN_UUID       = "45014cff-c156-5f3e-bfea-dfb9131340d9"
 GET_DESIGN_TEXT_UUID     = "2569b7b5-a380-59fa-a60b-32c3666c1e1b"
 UPDATE_DESIGN_TEXT_UUID  = "0acef2a3-c54a-5134-a30b-9a15e01b98d5"
 ADD_DESIGN_ELEMENT_UUID  = "d786f8d9-16a9-5e32-84ed-26edadc10ba9"
+MOVE_ELEMENTS_UUID       = "8b69215b-1d6d-54ad-9e20-14460d123f40"
 
 _DOMAIN_TOOLS = [
     ToolIdentity(
@@ -227,6 +228,10 @@ _DOMAIN_TOOLS = [
     ToolIdentity(
         tool_id=ADD_DESIGN_ELEMENT_UUID, capability="add_design_element", category="write",
         intent="Add a new text element to a stored design, saved as a new design",
+    ),
+    ToolIdentity(
+        tool_id=MOVE_ELEMENTS_UUID, capability="move_elements", category="write",
+        intent="Shift a group of elements together and/or resize elements, saved as a new design",
     ),
 ]
 
@@ -992,6 +997,73 @@ async def add_design_element(
             "face": face.lower(),
             "placed": {"x": el["x"], "y": el["y"], "width": el["width"], "height": el["height"]},
             "from_design_id": design_id,
+        }
+
+    return await _run_github(npub, op)
+
+
+@tool
+@runtime.paid_tool(MOVE_ELEMENTS_UUID)
+async def move_elements(
+    design_id: str,
+    edits: list[dict[str, Any]],
+    label: str = "",
+    npub: _NPUB = "",
+    dpop_token: str = "",
+) -> dict[str, Any]:
+    """Move a group of elements together and/or resize elements; save as a NEW design.
+
+    The Designer can move only one layer at a time, so a block of layered content
+    (a spec panel, a logo lockup) drifts out of alignment when its backing shape is
+    moved alone. This relocks that block: name the ids and shift them as one rigid
+    object, and separately re-centre or resize individual rectangles — in a single
+    edited copy. The source design is untouched; a new design_id is returned to
+    apply onto the product with the browser courier.
+
+    Nothing is validated against panel bounds here (unlike add_design_element): you
+    are re-aligning existing, deliberately-placed content, so the caller owns the
+    coordinates. The heavy background image is never moved unless you name its id.
+
+    Args:
+        design_id: The design to edit, from roastify_list_designs.
+        edits: A list of geometry edits, each one of:
+            - group shift: {"ids": ["a", "b", ...], "dx": N, "dy": M} — add the same
+              delta to every listed element's x/y (design units; +dy is down, +dx is
+              right). Use this to move a whole block together.
+            - absolute set: {"id": "a", "x": ?, "y": ?, "width": ?, "height": ?} — set
+              only the keys you include, e.g. re-centre and resize one rectangle.
+            Get element ids and their current geometry from roastify_get_design_text.
+        label: A name for the new design (defaults to the source label + " (aligned)").
+    """
+    if not design_id:
+        return {"success": False, "error": "design_id is required"}
+    if not isinstance(edits, list) or not edits:
+        return {"success": False, "error": "edits must be a non-empty list of geometry edits"}
+
+    async def op(store: github_store.GitHubStore) -> dict[str, Any]:
+        found = await store.get_skeleton(design_id)
+        if found is None:
+            return {"success": False, "error": f"no design '{design_id}' in your library"}
+        design = found["skeleton"]
+        changed, missing = github_store.edit_geometry(design, edits)
+        if changed == 0:
+            return {
+                "success": False,
+                "error": (f"no elements matched; unknown ids: {missing}. "
+                          "Call roastify_get_design_text for valid ids." if missing
+                          else "edits changed nothing; each edit needs {ids,dx,dy} or {id,x/y/width/height}"),
+            }
+        meta = await store.put_design(
+            design, label=label or f"{found['label']} (aligned)",
+            product_id=found["product_id"], source_title=found["source_title"],
+        )
+        return {
+            "success": True,
+            "design_id": meta["design_id"],
+            "label": meta["label"],
+            "from_design_id": design_id,
+            "elements_changed": changed,
+            "unknown_ids": missing,
         }
 
     return await _run_github(npub, op)

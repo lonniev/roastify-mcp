@@ -117,6 +117,31 @@ def test_first_collision_skips_background_flags_content():
     assert gs.first_collision(clear, d) is None
 
 
+def test_edit_geometry_group_shift_moves_together():
+    d = json.loads(json.dumps(DESIGN))
+    changed, missing = gs.edit_geometry(d, [{"ids": ["sc", "t1"], "dx": 10, "dy": -5}])
+    assert (changed, missing) == (2, [])
+    by = {e["id"]: e for e in d["elements"]}
+    assert (by["sc"]["x"], by["sc"]["y"]) == (110, 195)   # 100+10, 200-5
+    assert (by["t1"]["x"], by["t1"]["y"]) == (510, 895)   # 500+10, 900-5
+    assert by["bg"]["x"] == 0 and by["bg"]["y"] == 0       # unnamed element untouched
+
+
+def test_edit_geometry_absolute_set_only_named_keys():
+    d = json.loads(json.dumps(DESIGN))
+    changed, missing = gs.edit_geometry(d, [{"id": "sc", "x": 250, "width": 500}])
+    assert (changed, missing) == (1, [])
+    sc = {e["id"]: e for e in d["elements"]}["sc"]
+    assert sc["x"] == 250 and sc["width"] == 500
+    assert sc["y"] == 200 and sc["height"] == 40           # keys not named are preserved
+
+
+def test_edit_geometry_reports_unknown_ids():
+    d = json.loads(json.dumps(DESIGN))
+    changed, missing = gs.edit_geometry(d, [{"ids": ["sc", "nope"], "dx": 1, "dy": 0}])
+    assert changed == 1 and missing == ["nope"]
+
+
 def test_apply_text_edits_changes_only_named_layers():
     d = json.loads(json.dumps(DESIGN))
     assert gs.apply_text_edits(d, {"t1": "Colombia", "nope": "x"}) == 1
