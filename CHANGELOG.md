@@ -14,7 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   time, so a layered spec block drifts out of alignment when its backing shape is
   moved alone. This relocks it: name the ids and shift them by a common (dx, dy),
   and separately re-centre/resize individual rectangles, in one edited copy. Pure
-  helper `github_store.edit_geometry` (group shift or absolute set per edit).
+  helper `github_store.edit_geometry` (group shift or absolute set per edit). Line
+  shapes carry absolute endpoints (`x1/y1/x2/y2`, `points`); a shift translates those
+  too, so a moved divider line travels with its box instead of staying behind.
 
 ### Fixed
 
