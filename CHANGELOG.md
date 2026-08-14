@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Courier Design Chooser: loading, error, and traceability states** (field report
+  roastify-mcp#35). The library fetch now shows a spinner + "Loading designs…" row and,
+  on failure, a distinguishable error row with a Retry button — the chooser no longer
+  reads as an empty library while it is actually fetching or has failed. Each row shows
+  its full label on hover (the distinguishing tail is no longer lost to wrap) and its
+  backing repo path (`designs/<id>/`), a stable disambiguator when two labels differ
+  only by a trailing parenthetical. (Commit-SHA / `from_design_id` derivation remain a
+  follow-up — they need the MCP store to surface `sha`/`path` first.)
+
 ### Changed
 
 - **The design store is now configuration management.** Editing a design
