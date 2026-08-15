@@ -455,6 +455,18 @@ async def test_description_round_trips_and_survives_edits():
     assert (await r.get_skeleton(m["design_id"]))["description"] == desc
 
 
+async def test_set_new_description_overwrites_in_place():
+    # Mirrors set_product_description: read the skeleton, re-save the SAME folder with
+    # new description prose, design bytes untouched.
+    r = FakeGitHubStore()
+    m = await r.put_design(DESIGN, label="Eth", description="old copy")
+    found = await r.get_skeleton(m["design_id"])
+    m2 = await r.put_design(found["skeleton"], design_id=m["design_id"],
+                            label=found["label"], description="new bright & floral copy")
+    assert m2["design_id"] == m["design_id"]
+    assert (await r.get_design(m["design_id"]))["description"] == "new bright & floral copy"
+
+
 async def test_get_skeleton_never_inlines_the_image():
     r = FakeGitHubStore()
     m = await r.put_design(DESIGN, label="e")
