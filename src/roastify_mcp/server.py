@@ -695,6 +695,29 @@ async def _run_github(npub: str, op: Any) -> dict[str, Any]:
         }
 
 
+# Commit discipline for AI agents: every design commit needs a message that says
+# what changed and why (not a human dev's lazy "save this") and the NEXT semver.
+_LAZY_COMMIT = {
+    "save", "save this", "save it", "update", "updates", "updated", "wip", "changes",
+    "change", "changed", "edit", "edits", "edited", "fix", "fixes", "fixed", "commit",
+    "done", "misc", "stuff", "asdf", "test", ".", "-",
+}
+_SEMVER_RE = re.compile(r"\d+\.\d+\.\d+")
+
+
+def _check_commit(commit_message: str, version_tag: str) -> str:
+    """Validate an agent's commit message + version tag. Returns "" if OK, else an error."""
+    msg = commit_message.strip()
+    if not msg:
+        return "commit_message is required — describe WHAT changed and WHY, not 'save this'"
+    if msg.lower() in _LAZY_COMMIT or len(msg) < 12:
+        return ("commit_message must be specific — what changed and why, not a placeholder "
+                "like 'save this' or 'update'")
+    if not _SEMVER_RE.fullmatch(version_tag.strip()):
+        return "version_tag must be the next semver MAJOR.MINOR.PATCH (e.g. 1.3.0), no leading 'v'"
+    return ""
+
+
 @tool
 @runtime.paid_tool(STASH_DESIGN_UUID)
 async def stash_design(
@@ -726,21 +749,19 @@ async def stash_design(
         source_title: The product's title at stash time, for your reference.
         description: The product's store-page description at stash time, versioned
             with the design so Fetch can re-apply it to a target product.
-        commit_message: The git commit message for this version. Required, non-blank.
-        version_tag: A unique semver version for this commit — MAJOR.MINOR.PATCH like
-            1.2.3, no leading 'v' (git tag, namespaced per design). Required; reusing a
-            version for the same design is refused.
+        commit_message: A specific description of WHAT changed and WHY — write a real
+            commit message, not a placeholder like 'save this' or 'update'. Required.
+        version_tag: The NEXT semver version (MAJOR.MINOR.PATCH like 1.2.3, no 'v'); check
+            roastify_list_design_versions and increment. Required; reusing one is refused.
         design_id: Optional explicit folder id. Omit and the id is the slug of the
             label, so re-stashing the same design commits a new version in place
             instead of creating a duplicate.
     """
     if not isinstance(design, dict) or not design:
         return {"success": False, "error": "design must be a non-empty JSON object"}
-    if not commit_message.strip():
-        return {"success": False, "error": "commit_message is required and cannot be blank"}
-    if not re.fullmatch(r"\d+\.\d+\.\d+", version_tag.strip()):
-        return {"success": False,
-                "error": "version_tag must be semver MAJOR.MINOR.PATCH (e.g. 1.2.3), no leading 'v'"}
+    bad = _check_commit(commit_message, version_tag)
+    if bad:
+        return {"success": False, "error": bad}
 
     async def op(store: github_store.GitHubStore) -> dict[str, Any]:
         meta = await store.put_design(
@@ -923,6 +944,8 @@ async def update_design_text(
     design_id: str,
     edits: _STR_DICT,
     label: str = "",
+    commit_message: str = "",
+    version_tag: str = "",
     npub: _NPUB = "",
     dpop_token: str = "",
 ) -> dict[str, Any]:
@@ -945,6 +968,10 @@ async def update_design_text(
             value or embed it in a longer blurb. A JSON object string is also
             accepted (some MCP clients serialize object args that way).
         label: Rename the design (optional). Defaults to keeping its current label.
+        commit_message: A specific description of WHAT changed and WHY — a real commit
+            message, not a placeholder like 'save this' or 'update'. Required.
+        version_tag: The NEXT semver version (MAJOR.MINOR.PATCH, e.g. 1.3.0, no 'v') — call
+            roastify_list_design_versions and increment. Required; reusing one is refused.
     """
     if not design_id:
         return {"success": False, "error": "design_id is required"}
@@ -952,6 +979,9 @@ async def update_design_text(
     edit_map = dict(edits or {})
     if not edit_map:
         return {"success": False, "error": "edits must be a non-empty {layer_id: new_text} map"}
+    bad = _check_commit(commit_message, version_tag)
+    if bad:
+        return {"success": False, "error": bad}
 
     async def op(store: github_store.GitHubStore) -> dict[str, Any]:
         found = await store.get_skeleton(design_id)
@@ -981,6 +1011,7 @@ async def update_design_text(
             label=label or found["label"],
             product_id=found["product_id"], source_title=found["source_title"],
             description=found.get("description", ""),  # preserve the versioned description
+            commit_message=commit_message, version_tag=version_tag,
             repair=True,  # heal Roastify's lossy migrated fonts[] on every save
         )
         return {
@@ -1009,6 +1040,8 @@ async def add_design_element(
     position: dict[str, Any],
     width: int = 0,
     label: str = "",
+    commit_message: str = "",
+    version_tag: str = "",
     client_req_id: str = "",
     npub: _NPUB = "",
     dpop_token: str = "",
@@ -1037,6 +1070,10 @@ async def add_design_element(
         width: The text box (wrap) width in design units. Defaults to the panel
             width minus margins.
         label: Rename the design (optional). Defaults to keeping its current label.
+        commit_message: A specific description of WHAT changed and WHY — a real commit
+            message, not a placeholder like 'save this' or 'update'. Required.
+        version_tag: The NEXT semver version (MAJOR.MINOR.PATCH, e.g. 1.3.0, no 'v') — call
+            roastify_list_design_versions and increment. Required; reusing one is refused.
         client_req_id: Your idempotency key.
     """
     for name, val in (("design_id", design_id), ("face", face), ("text", text), ("style_from", style_from)):
@@ -1044,6 +1081,9 @@ async def add_design_element(
             return {"success": False, "error": f"{name} is required"}
     if not isinstance(position, dict) or not position:
         return {"success": False, "error": "position must be {x,y} or a relative anchor"}
+    bad = _check_commit(commit_message, version_tag)
+    if bad:
+        return {"success": False, "error": bad}
 
     async def op(store: github_store.GitHubStore) -> dict[str, Any]:
         found = await store.get_skeleton(design_id)
@@ -1102,6 +1142,7 @@ async def add_design_element(
             design, design_id=design_id, label=label or found["label"],
             product_id=found["product_id"], source_title=found["source_title"],
             description=found.get("description", ""),  # preserve the versioned description
+            commit_message=commit_message, version_tag=version_tag,
             repair=True,  # heal Roastify's lossy migrated fonts[] on every save
         )
         return {
@@ -1121,6 +1162,8 @@ async def move_elements(
     design_id: str,
     edits: list[dict[str, Any]],
     label: str = "",
+    commit_message: str = "",
+    version_tag: str = "",
     npub: _NPUB = "",
     dpop_token: str = "",
 ) -> dict[str, Any]:
@@ -1152,11 +1195,18 @@ async def move_elements(
               layer is ignored. Use fontSize to match one label's size to a peer.
             Get element ids and their current geometry from roastify_get_design_text.
         label: Rename the design (optional). Defaults to keeping its current label.
+        commit_message: A specific description of WHAT changed and WHY — a real commit
+            message, not a placeholder like 'save this' or 'update'. Required.
+        version_tag: The NEXT semver version (MAJOR.MINOR.PATCH, e.g. 1.3.0, no 'v') — call
+            roastify_list_design_versions and increment. Required; reusing one is refused.
     """
     if not design_id:
         return {"success": False, "error": "design_id is required"}
     if not isinstance(edits, list) or not edits:
         return {"success": False, "error": "edits must be a non-empty list of geometry edits"}
+    bad = _check_commit(commit_message, version_tag)
+    if bad:
+        return {"success": False, "error": bad}
 
     async def op(store: github_store.GitHubStore) -> dict[str, Any]:
         found = await store.get_skeleton(design_id)
@@ -1194,6 +1244,7 @@ async def move_elements(
             design, design_id=design_id, label=label or found["label"],
             product_id=found["product_id"], source_title=found["source_title"],
             description=found.get("description", ""),  # preserve the versioned description
+            commit_message=commit_message, version_tag=version_tag,
             repair=True,  # heal Roastify's lossy migrated fonts[] on every save
         )
         return {
@@ -1214,6 +1265,8 @@ async def set_product_description(
     design_id: str,
     description: str,
     label: str = "",
+    commit_message: str = "",
+    version_tag: str = "",
     npub: _NPUB = "",
     dpop_token: str = "",
 ) -> dict[str, Any]:
@@ -1231,9 +1284,16 @@ async def set_product_description(
         design_id: The design to edit, from roastify_list_designs.
         description: The new store-page description prose.
         label: Rename the design (optional). Defaults to keeping its current label.
+        commit_message: A specific description of WHAT changed and WHY — a real commit
+            message, not a placeholder like 'save this' or 'update'. Required.
+        version_tag: The NEXT semver version (MAJOR.MINOR.PATCH, e.g. 1.3.0, no 'v') — call
+            roastify_list_design_versions and increment. Required; reusing one is refused.
     """
     if not design_id:
         return {"success": False, "error": "design_id is required"}
+    bad = _check_commit(commit_message, version_tag)
+    if bad:
+        return {"success": False, "error": bad}
 
     async def op(store: github_store.GitHubStore) -> dict[str, Any]:
         found = await store.get_skeleton(design_id)
@@ -1243,7 +1303,8 @@ async def set_product_description(
             found["skeleton"], design_id=design_id,
             label=label or found["label"],
             product_id=found["product_id"], source_title=found["source_title"],
-            description=description, repair=True,
+            description=description, commit_message=commit_message, version_tag=version_tag,
+            repair=True,
         )
         return {
             "success": True,

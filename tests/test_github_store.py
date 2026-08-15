@@ -543,3 +543,16 @@ async def test_edit_flow_new_design_shares_image():
     assert got["design"]["elements"][0]["src"] == _BIG_IMG
     # decode sanity: the re-inlined image is valid base64 of the same bytes
     assert base64.b64decode(got["design"]["elements"][0]["src"].split(",", 1)[1]) == b"\x00" * 60_000
+
+
+def test_check_commit_rejects_lazy_messages_and_bad_semver():
+    from roastify_mcp import server as srv
+    # lazy / placeholder messages are refused
+    for lazy in ("save this", "update", "wip", "fix", "changes"):
+        assert srv._check_commit(lazy, "1.2.3")
+    assert srv._check_commit("too short", "1.2.3")            # under length threshold
+    # non-semver / v-prefixed versions are refused
+    assert srv._check_commit("Shorten the tasting blurb to fit", "v1.2.3")
+    assert srv._check_commit("Shorten the tasting blurb to fit", "1.2")
+    # a specific message + real semver passes
+    assert srv._check_commit("Shorten the tasting blurb to fit the front panel", "1.2.3") == ""
