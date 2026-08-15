@@ -440,14 +440,17 @@ function main(): void {
   const applyDescription = async (target: Rec, description: string): Promise<void> => {
     if (!description) return;
     const full = await getProductById(idOf(target));
-    // Roastify's product carries its name as `title` and its price as an integer
-    // `retailPrice` in cents. updateStoreMetadata wants {name, retailPrice}, so echo
-    // the product's current values and change only the description.
-    const pname = typeof full?.title === "string" ? full.title
-      : typeof full?.name === "string" ? (full.name as string) : null;
-    const price = typeof full?.retailPrice === "number" ? full.retailPrice : null;
+    // updateStoreMetadata is a read-modify-write: Roastify's product carries its name
+    // as `productName` (not title/name) and has NO top-level price — the store price is
+    // max(variants[].retailPrice), in integer cents. Echo those and change only the
+    // description. Guarded: skip rather than risk wiping name/price if we can't read them.
+    const pname = typeof full?.productName === "string" ? full.productName : null;
+    const variants = Array.isArray(full?.variants) ? (full.variants as Rec[]) : [];
+    const prices = variants.map((v) => Number((v as Rec).retailPrice) || 0).filter((n) => n > 0);
+    const price = prices.length ? Math.max(...prices) : null;
     if (!full || pname === null || price === null) {
-      log("  · description not applied (couldn't read the product's store fields).");
+      const why = !full ? "no product" : pname === null ? "no productName" : "no variant price";
+      log(`  · description not applied (couldn't read the product's store fields: ${why}).`);
       return;
     }
     try {
