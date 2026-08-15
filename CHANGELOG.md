@@ -18,7 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   list now has a pop-out toggle that detaches it into a separate, taller, draggable window, so
   the catalog/Commit controls and the full design list are visible at once instead of scrolling
   a strip inside the panel. Version-picker and confirm dialogs follow the list into whichever
-  window holds it.
+  window holds it. The header controls are now Material Design glyphs (inlined SVG) in padded,
+  hover-lit tap targets, with the cramped body type bumped up for legibility on iPad.
 - **Read and set element `fill`/`stroke` — so an agent can audit and correct the roast
   scale.** `get_design_text` now returns each non-text element's `fill` and `stroke`
   colours (previously id/type/name/bounds only), so an agent can see which roast-scale

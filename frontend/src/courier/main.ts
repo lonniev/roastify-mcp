@@ -23,8 +23,21 @@ type Rec = Record<string, unknown>;
 // The GitHub octocat mark (fill=currentColor so it takes the button's ink),
 // reused on the Commit and Fetch buttons — both are GitHub operations.
 const OCTO =
-  '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">' +
+  '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">' +
   '<path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>';
+
+// Material Design (Symbols) glyphs, inlined as SVG — the courier is injected into a
+// foreign origin, so an external icon font is out; these ride in the bundle and take
+// the button's ink via currentColor. 24×24 viewBox, drawn at 20px in a padded .ic tap target.
+const mIcon = (d: string): string =>
+  `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="${d}"/></svg>`;
+const IC = {
+  close: mIcon("M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"),
+  refresh: mIcon("M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"),
+  popout: mIcon("M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3z"),
+  dock: mIcon("M22 3.41 16.71 8.7 20 12h-8V4l3.29 3.29L20.59 2zM3.41 22l5.29-5.29L12 20v-8H4l3.29 3.29L2 20.59z"),
+  expand: mIcon("M7 14H5v5h5v-2H7zm-2-4h2V7h3V5H5zm12 7h-3v2h5v-5h-2zM14 5v2h3v3h2V5z"),
+};
 
 if (location.host !== "merchant.roastify.app") {
   alert("Open this on merchant.roastify.app (signed in), then tap the bookmarklet there.");
@@ -137,13 +150,16 @@ function main(): void {
       .rz{position:absolute;right:2px;bottom:2px;width:16px;height:16px;cursor:nwse-resize;
         border-right:2px solid #4a544f;border-bottom:2px solid #4a544f;
         border-bottom-right-radius:11px;touch-action:none}
-      .h{display:flex;align-items:center;gap:6px;padding:10px 14px;background:#0d100f;
+      .h{display:flex;align-items:center;gap:8px;padding:9px 10px 9px 14px;background:#0d100f;
         cursor:move;user-select:none;flex:0 0 auto;border-radius:12px 12px 0 0}
-      .h b{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#4fbfc0;flex:1}
-      .h .ic{cursor:pointer;color:#828d86;font-size:16px;line-height:1;padding:3px 6px}
-      .h .ic:hover{color:#e8ece6}
+      .h b{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#4fbfc0;flex:1}
+      /* Icon buttons — Material glyphs in a padded, hover-lit tap target (min 32px). */
+      .ic{display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+        color:#9aa39c;padding:6px;border-radius:8px;line-height:0;-webkit-tap-highlight-color:transparent}
+      .ic:hover{color:#e8ece6;background:#232b29}
+      .ic svg{display:block;width:20px;height:20px}
       .b{padding:14px;display:flex;flex-direction:column;gap:12px;overflow:auto}
-      label{font-size:11px;color:#828d86;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em}
+      label{font-size:12px;color:#8f988f;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em}
       input,select,button{font:inherit;box-sizing:border-box}
       input,select{width:100%;background:#101312;color:#e8ece6;border:1px solid #2c3432;border-radius:8px;padding:9px;font-size:14px}
       select{appearance:none;-webkit-appearance:none;padding-right:28px;background-repeat:no-repeat;background-position:right 10px center;
@@ -164,11 +180,11 @@ function main(): void {
       .libhead label{margin:0}
       .lib{display:flex;flex-direction:column;gap:8px;max-height:34vh;overflow:auto}
       .p.big .lib{max-height:52vh}
-      .item{border:1px solid #2c3432;border-radius:8px;padding:9px 11px;background:#141817}
-      .item .nm{font-size:13px;color:#e8ece6;font-weight:700;word-break:break-word}
-      .item .mt{font-size:11px;color:#828d86;margin-top:3px}
-      .item .ax{display:flex;gap:6px;margin-top:8px;justify-content:flex-end}
-      .item .ax button{padding:5px 9px;font-size:12px;display:inline-flex;align-items:center;gap:5px;line-height:1}
+      .item{border:1px solid #2c3432;border-radius:8px;padding:10px 12px;background:#141817}
+      .item .nm{font-size:14px;color:#e8ece6;font-weight:700;word-break:break-word}
+      .item .mt{font-size:12px;color:#8f988f;margin-top:3px}
+      .item .ax{display:flex;gap:8px;margin-top:10px;justify-content:flex-end}
+      .item .ax button{padding:7px 11px;font-size:13px;display:inline-flex;align-items:center;gap:6px;line-height:1}
       .empty{color:#828d86;font-size:12px;padding:6px 0}
       .lib .load{color:#4fbfc0;font-size:12px;padding:6px 0}
       .lib .err{color:#dc8a6f;font-size:12px;padding:6px 0}
@@ -206,8 +222,8 @@ function main(): void {
     </style>
     <div class="p">
       <div class="h" id="hd"><b>Design courier</b>
-        <span class="ic" id="exp" title="Expand / shrink">&#x2922;</span>
-        <span class="ic" id="x" title="Close">&#x2715;</span></div>
+        <span class="ic" id="exp" title="Expand / shrink">${IC.expand}</span>
+        <span class="ic" id="x" title="Close">${IC.close}</span></div>
       <div class="b">
         <div id="login">
           <label>Log in to Roastify MCP with your npub</label>
@@ -226,9 +242,9 @@ function main(): void {
           </div>
           <div class="sec" id="libsec">
             <div class="libhead"><label>Library <span id="libn"></span></label>
-              <span style="display:flex;gap:2px">
-                <span class="ic" id="pop" title="Pop out / dock this list">&#x2197;</span>
-                <span class="ic" id="r" title="Refresh">&#x21bb;</span>
+              <span style="display:flex;gap:6px">
+                <span class="ic" id="pop" title="Pop out / dock this list">${IC.popout}</span>
+                <span class="ic" id="r" title="Refresh">${IC.refresh}</span>
               </span></div>
             <div class="lib" id="lib"></div>
           </div>
@@ -238,7 +254,7 @@ function main(): void {
     </div>
     <div class="p2" id="p2">
       <div class="h" id="hd2"><b>Fetchable designs</b>
-        <span class="ic" id="dock" title="Dock back into the panel">&#x2199;</span></div>
+        <span class="ic" id="dock" title="Dock back into the panel">${IC.dock}</span></div>
       <div class="b" id="p2body"></div>
     </div>`;
   const $ = (id: string) => sh.getElementById(id) as HTMLElement;
