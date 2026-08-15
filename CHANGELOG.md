@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rejection is logged ("locked — left unchanged") and never fails the design apply.
   `stash_design` takes a `description`; the edit tools preserve it across text/geometry
   saves (like `label`); `list_designs`/`fetch_design` return it.
+- **`roastify_set_product_description(design_id, description)` — the AI client authors the
+  description.** `get_design_text` now returns the current `description` (Roastify's
+  auto-generated copy is the helpful starting point), and this new tool writes a refined
+  one back, committing a new version in place. Closes the loop: without it the client
+  could preserve and re-apply a description but never author one.
 - **Are-you-sure confirmation on Commit and Fetch**, each spelling out exactly what
   clicking through will change — Commit: a new git version of the design + description,
   nothing on Roastify/Shopify; Fetch: overwrites the product's design + description on
