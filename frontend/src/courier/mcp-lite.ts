@@ -123,6 +123,10 @@ export interface StoredDesignMeta {
   description?: string;
 }
 
+export interface StoredVersion {
+  sha: string; short_sha: string; date?: string; message?: string; tag?: string; commit_url?: string;
+}
+
 // The small set of calls the courier makes. Authed calls carry the stored
 // npub + dpop_token, exactly as the Bench's callTool injects them.
 export const api = {
@@ -142,9 +146,12 @@ export const api = {
       commit_message: o.commitMessage ?? "", version_tag: o.versionTag ?? "",
       design_id: o.designId ?? "", npub: store.npub(), dpop_token: store.proof(),
     }) as Promise<{ success: boolean; assets?: number; error?: string }>,
-  fetch: (designId: string) =>
-    callMcp("fetch_design", { design_id: designId, npub: store.npub(), dpop_token: store.proof() }) as
+  fetch: (designId: string, ref = "") =>
+    callMcp("fetch_design", { design_id: designId, ref, npub: store.npub(), dpop_token: store.proof() }) as
       Promise<{ success: boolean; design?: Rec; description?: string; error?: string }>,
+  listVersions: (designId: string) =>
+    callMcp("list_design_versions", { design_id: designId, npub: store.npub(), dpop_token: store.proof() }) as
+      Promise<{ success: boolean; versions?: StoredVersion[]; error?: string }>,
   del: (designId: string) =>
     callMcp("delete_design", { design_id: designId, npub: store.npub(), dpop_token: store.proof() }) as
       Promise<{ success: boolean; deleted?: boolean; error?: string }>,
