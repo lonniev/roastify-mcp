@@ -264,6 +264,36 @@ async def test_latest_commit_maps_sha_and_url():
 
 
 @respx.mock
+async def test_list_versions_merges_commits_and_tags():
+    store = gs.GitHubStore("tok", "owner", "repo", "main")
+    respx.get(url__regex=r"/commits\?").mock(return_value=httpx.Response(200, json=[
+        {"sha": "aaa1119", "html_url": "https://github.com/owner/repo/commit/aaa1119",
+         "commit": {"message": "v1 cut", "committer": {"date": "2026-08-15T00:00:00Z"}}},
+        {"sha": "bbb2229", "html_url": "https://github.com/owner/repo/commit/bbb2229",
+         "commit": {"message": "initial", "committer": {"date": "2026-08-14T00:00:00Z"}}},
+    ]))
+    respx.get(url__regex=r"/git/matching-refs/tags/").mock(return_value=httpx.Response(200, json=[
+        {"ref": "refs/tags/mydesign/v1.0", "object": {"sha": "aaa1119"}},
+    ]))
+    vs = await store.list_versions("mydesign")
+    assert [v["sha"] for v in vs] == ["aaa1119", "bbb2229"]        # newest first, as returned
+    assert vs[0]["tag"] == "v1.0" and vs[0]["short_sha"] == "aaa1119"
+    assert vs[0]["date"] == "2026-08-15T00:00:00Z" and vs[0]["message"] == "v1 cut"
+    assert vs[1]["tag"] == ""                                       # untagged commit
+
+
+@respx.mock
+async def test_get_file_uses_the_given_ref():
+    store = gs.GitHubStore("tok", "owner", "repo", "main")
+    route = respx.get(url__regex=r"contents/designs/x/design\.json\?ref=abc123").mock(
+        return_value=httpx.Response(200, json={
+            "encoding": "base64", "content": base64.b64encode(b"{}").decode()}))
+    async with httpx.AsyncClient() as client:
+        await store._get_file(client, "designs/x/design.json", "abc123")
+    assert route.called    # the ref (a commit sha) reached the Contents API
+
+
+@respx.mock
 async def test_latest_commit_is_none_when_absent():
     store = gs.GitHubStore("tok", "owner", "repo", "main")
     respx.get(url__regex=r"/commits\?").mock(return_value=httpx.Response(200, json=[]))
@@ -360,7 +390,7 @@ class FakeGitHubStore(gs.GitHubStore):
             return {"ref": ref}
         raise AssertionError(f"unexpected _req in fake: {method} {path}")
 
-    async def _get_file(self, client: Any, path: str) -> bytes | None:  # type: ignore[override]
+    async def _get_file(self, client: Any, path: str, ref: str = "") -> bytes | None:  # type: ignore[override]
         return self.files.get(path)
 
     async def _list_dir(self, client: Any, path: str) -> list[dict[str, Any]]:  # type: ignore[override]

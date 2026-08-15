@@ -16,7 +16,7 @@
  * courier lives (merchant origin) but the MCP is on the Bench's origin. The MCP is
  * reached through the Bench's Cloudflare proxy (Access-Control-Allow-Origin: *).
  */
-import { api, store, type StoredDesignMeta } from "./mcp-lite";
+import { api, store, type StoredDesignMeta, type StoredVersion } from "./mcp-lite";
 
 type Rec = Record<string, unknown>;
 
@@ -171,6 +171,17 @@ function main(): void {
         font-family:ui-monospace,Menlo,monospace;word-break:break-all}
       .item .id a.sha{color:#4fbfc0;text-decoration:none}
       .item .id a.sha:hover{text-decoration:underline}
+      .ovl{position:absolute;inset:0;background:rgba(8,10,9,.74);border-radius:12px;z-index:5;
+        display:flex;align-items:center;justify-content:center;padding:14px}
+      .ovlbox{background:#171b1a;border:1px solid #2c3432;border-radius:10px;padding:12px;
+        width:100%;max-height:82%;overflow:auto;display:flex;flex-direction:column;gap:8px}
+      .ovlh{font-size:12px;color:#4fbfc0;text-transform:uppercase;letter-spacing:.06em}
+      .vrow{display:flex;flex-direction:column;gap:2px;align-items:flex-start;text-align:left;
+        background:#141817;border:1px solid #2c3432;color:#e8ece6;font-weight:400;padding:8px 10px}
+      .vrow .vtop{font-size:12px;font-weight:700}
+      .vrow .vtag{color:#4fbfc0}
+      .vrow .vmsg{font-size:11px;color:#a9b2ac;word-break:break-word}
+      .vrow .vsha{font-size:10px;color:#5f6b64;font-family:ui-monospace,Menlo,monospace}
       #work{flex-direction:column;gap:12px}
       pre{margin:0;background:#0d100f;border:1px solid #2c3432;border-radius:8px;padding:9px;
         font-size:11px;line-height:1.5;max-height:120px;overflow:auto;white-space:pre-wrap;word-break:break-word}
@@ -353,7 +364,7 @@ function main(): void {
       applyBtn.innerHTML = OCTO + "Fetch";
       applyBtn.title = "Fetch this design from GitHub onto the selected product";
       applyBtn.disabled = !PRODUCTS.length;
-      applyBtn.onclick = () => applyDesign(d);
+      applyBtn.onclick = () => fetchFlow(d);
       const delBtn = document.createElement("button");
       delBtn.className = "danger";
       delBtn.textContent = "🗑";
@@ -498,7 +509,7 @@ function main(): void {
 
   // Fetch a library design and WRITE it onto the selected product. The target's
   // own preview/mockups are reused; the Designer re-renders on open.
-  const applyDesign = async (meta: StoredDesignMeta) => {
+  const applyDesign = async (meta: StoredDesignMeta, ref = "", picked: StoredVersion | null = null) => {
     const target = PRODUCTS[+val("prod")];
     if (!target) { log("✗ pick a product first."); return; }
     if (!target.designImageUrl) {
@@ -506,9 +517,12 @@ function main(): void {
       return;
     }
     const name = meta.label || meta.design_id.slice(0, 8);
+    const ver = picked
+      ? `version ${picked.tag || picked.short_sha} (${String(picked.date || "").slice(0, 10)})`
+      : "the latest version";
     const hasDesc = !!(meta.description && meta.description.trim());
     if (!confirm(
-      `Fetch “${name}” onto “${labelOf(target)}”?\n\n` +
+      `Fetch “${name}” (${ver}) onto “${labelOf(target)}”?\n\n` +
       `This OVERWRITES on the product:\n` +
       `  • its design (open the Designer to see it render)\n` +
       (hasDesc
@@ -516,9 +530,9 @@ function main(): void {
         : `  (no saved description travels with this design)\n`) +
       `\nThis changes the product on Roastify.`,
     )) return;
-    log(`applying “${name}” → “${labelOf(target)}”…`);
+    log(`applying “${name}” (${ver}) → “${labelOf(target)}”…`);
     try {
-      const r = await api.fetch(meta.design_id);
+      const r = await api.fetch(meta.design_id, ref);
       if (!r.success || !r.design) { log("✗ " + (r.error || "fetch failed")); return; }
       const design = r.design;
       const jsonKey = `design-json/${rid()}.json`;
@@ -541,6 +555,71 @@ function main(): void {
     } catch (e) {
       log("✗ " + (e as Error).message);
     }
+  };
+
+  // Modal over the panel: pick which committed version to fetch. Resolves to the
+  // chosen version, or null if cancelled.
+  const pickVersion = (versions: StoredVersion[]): Promise<StoredVersion | null> =>
+    new Promise((resolve) => {
+      const ov = document.createElement("div");
+      ov.className = "ovl";
+      const box = document.createElement("div");
+      box.className = "ovlbox";
+      const h = document.createElement("div");
+      h.className = "ovlh";
+      h.textContent = "Pick a version to fetch";
+      box.appendChild(h);
+      const done = (v: StoredVersion | null) => { ov.remove(); resolve(v); };
+      for (const v of versions) {
+        const row = document.createElement("button");
+        row.className = "vrow";
+        const top = document.createElement("span");
+        top.className = "vtop";
+        top.textContent = v.date ? String(v.date).slice(0, 10) : "(undated)";
+        if (v.tag) {
+          const t = document.createElement("span");
+          t.className = "vtag";
+          t.textContent = `  [${v.tag}]`;
+          top.appendChild(t);
+        }
+        const msg = document.createElement("span");
+        msg.className = "vmsg";
+        msg.textContent = (v.message || "").split("\n")[0];
+        const sha = document.createElement("span");
+        sha.className = "vsha";
+        sha.textContent = v.short_sha;
+        row.append(top, msg, sha);
+        row.onclick = () => done(v);
+        box.appendChild(row);
+      }
+      const cancel = document.createElement("button");
+      cancel.className = "alt";
+      cancel.textContent = "Cancel";
+      cancel.onclick = () => done(null);
+      box.appendChild(cancel);
+      ov.appendChild(box);
+      (sh.querySelector(".p") as HTMLElement).appendChild(ov);
+    });
+
+  // Fetch entry point: offer a version picker when a design has more than one
+  // committed version, then apply the chosen one (latest if there's only one).
+  const fetchFlow = async (meta: StoredDesignMeta) => {
+    if (!PRODUCTS[+val("prod")]) { log("✗ pick a product first."); return; }
+    let ref = "";
+    let picked: StoredVersion | null = null;
+    try {
+      const lv = await api.listVersions(meta.design_id);
+      const versions = lv.versions || [];
+      if (versions.length > 1) {
+        picked = await pickVersion(versions);
+        if (!picked) { log("fetch cancelled."); return; }
+        ref = picked.sha;
+      }
+    } catch (e) {
+      log("✗ versions: " + (e as Error).message);
+      return;
+    }
+    await applyDesign(meta, ref, picked);
   };
 
   // Delete a design from the MCP library. The courier is the only UX for the

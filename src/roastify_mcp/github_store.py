@@ -569,9 +569,9 @@ class GitHubStore:
 
     # -- reads ---------------------------------------------------------------
 
-    async def _get_file(self, client: httpx.AsyncClient, path: str) -> bytes | None:
+    async def _get_file(self, client: httpx.AsyncClient, path: str, ref: str = "") -> bytes | None:
         data = await self._req(client, "GET", f"/repos/{self.owner}/{self.repo}/contents/{path}"
-                               f"?ref={self.branch}", allow_404=True)
+                               f"?ref={ref or self.branch}", allow_404=True)
         if not data:
             return None
         if data.get("encoding") == "base64" and data.get("content"):
@@ -693,12 +693,12 @@ class GitHubStore:
                 "commit_sha": commit_sha, "version_tag": version_tag,
                 "fonts_repaired": [f["family"] for f in repaired] if repaired is not None else None}
 
-    async def get_skeleton(self, design_id: str) -> dict[str, Any] | None:
+    async def get_skeleton(self, design_id: str, ref: str = "") -> dict[str, Any] | None:
         async with httpx.AsyncClient(timeout=60) as client:
-            raw = await self._get_file(client, f"designs/{design_id}/design.json")
+            raw = await self._get_file(client, f"designs/{design_id}/design.json", ref)
             if raw is None:
                 return None
-            meta_raw = await self._get_file(client, f"designs/{design_id}/meta.json")
+            meta_raw = await self._get_file(client, f"designs/{design_id}/meta.json", ref)
         meta = json.loads(meta_raw) if meta_raw else {}
         return {
             "design_id": design_id, "label": meta.get("label", ""),
@@ -707,8 +707,8 @@ class GitHubStore:
             "updated_at": meta.get("updated_at", ""), "skeleton": json.loads(raw),
         }
 
-    async def get_design(self, design_id: str) -> dict[str, Any] | None:
-        found = await self.get_skeleton(design_id)
+    async def get_design(self, design_id: str, ref: str = "") -> dict[str, Any] | None:
+        found = await self.get_skeleton(design_id, ref)
         if found is None:
             return None
         skeleton = found["skeleton"]
@@ -753,6 +753,37 @@ class GitHubStore:
 
             out = list(await asyncio.gather(*(row(n) for n in names)))
         out.sort(key=lambda d: d.get("updated_at", ""), reverse=True)
+        return out
+
+    async def list_versions(self, design_id: str) -> list[dict[str, Any]]:
+        """Every committed version of a design, newest first — the git history a
+        merchant picks from: sha, date, commit message, and version tag (if any)."""
+        prefix = f"designs/{design_id}/"
+        async with httpx.AsyncClient(timeout=60) as client:
+            commits = await self._req(
+                client, "GET",
+                f"/repos/{self.owner}/{self.repo}/commits"
+                f"?sha={self.branch}&path={prefix}design.json&per_page=50",
+                allow_404=True) or []
+            refs = await self._req(
+                client, "GET",
+                f"/repos/{self.owner}/{self.repo}/git/matching-refs/tags/{design_id}/",
+                allow_404=True) or []
+        tag_by_sha: dict[str, str] = {}
+        for r in refs:
+            obj = r.get("object", {}) if isinstance(r, dict) else {}
+            tag_by_sha[obj.get("sha", "")] = str(r.get("ref", "")).replace(f"refs/tags/{design_id}/", "")
+        out: list[dict[str, Any]] = []
+        for c in commits if isinstance(commits, list) else []:
+            sha = str(c.get("sha", ""))
+            commit = c.get("commit", {}) if isinstance(c, dict) else {}
+            out.append({
+                "sha": sha, "short_sha": sha[:7],
+                "date": (commit.get("committer", {}) or {}).get("date", ""),
+                "message": commit.get("message", ""),
+                "tag": tag_by_sha.get(sha, ""),
+                "commit_url": c.get("html_url", ""),
+            })
         return out
 
     async def delete_design(self, design_id: str) -> bool:

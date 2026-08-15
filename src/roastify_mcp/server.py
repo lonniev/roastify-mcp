@@ -162,6 +162,7 @@ UPDATE_DESIGN_TEXT_UUID  = "0acef2a3-c54a-5134-a30b-9a15e01b98d5"
 ADD_DESIGN_ELEMENT_UUID  = "d786f8d9-16a9-5e32-84ed-26edadc10ba9"
 MOVE_ELEMENTS_UUID       = "8b69215b-1d6d-54ad-9e20-14460d123f40"
 SET_PRODUCT_DESCRIPTION_UUID = "bb3a11fb-8d9f-5b83-beae-f8ef2e7501d1"
+LIST_DESIGN_VERSIONS_UUID = "38ac7bb5-ca0e-53c7-a559-fda2b9508ba5"
 
 _DOMAIN_TOOLS = [
     ToolIdentity(
@@ -238,6 +239,10 @@ _DOMAIN_TOOLS = [
     ToolIdentity(
         tool_id=SET_PRODUCT_DESCRIPTION_UUID, capability="set_product_description", category="write",
         intent="Set the product's store-page description on a stored design, committed in place",
+    ),
+    ToolIdentity(
+        tool_id=LIST_DESIGN_VERSIONS_UUID, capability="list_design_versions", category="read",
+        intent="List a design's committed versions (date, message, tag) to pick from",
     ),
 ]
 
@@ -748,21 +753,46 @@ async def stash_design(
 
 @tool
 @runtime.paid_tool(FETCH_DESIGN_UUID)
-async def fetch_design(design_id: str, npub: _NPUB = "",
+async def fetch_design(design_id: str, ref: str = "", npub: _NPUB = "",
                        dpop_token: str = "") -> dict[str, Any]:
     """Fetch one of your stored designs in full, with its images re-inlined.
 
     Args:
         design_id: The id from roastify_stash_design or roastify_list_designs.
+        ref: Optional git ref (a commit sha or version tag) to fetch a specific
+            version — from roastify_list_design_versions. Omit for the latest.
     """
     if not design_id:
         return {"success": False, "error": "design_id is required"}
 
     async def op(store: github_store.GitHubStore) -> dict[str, Any]:
-        found = await store.get_design(design_id)
+        found = await store.get_design(design_id, ref)
         if found is None:
-            return {"success": False, "error": f"no design '{design_id}' in your library"}
-        return {"success": True, **found}
+            return {"success": False, "error": f"no design '{design_id}' at ref '{ref or 'HEAD'}'"}
+        return {"success": True, "ref": ref, **found}
+
+    return await _run_github(npub, op)
+
+
+@tool
+@runtime.paid_tool(LIST_DESIGN_VERSIONS_UUID)
+async def list_design_versions(design_id: str, npub: _NPUB = "",
+                               dpop_token: str = "") -> dict[str, Any]:
+    """List a stored design's committed versions, newest first — the git history.
+
+    Each version carries its `sha`, `short_sha`, `date`, commit `message`, `tag` (the
+    version tag if one was set at Commit), and `commit_url`. Pass a version's `sha` (or
+    `tag`) as the `ref` to roastify_fetch_design to fetch that exact version.
+
+    Args:
+        design_id: The id from roastify_list_designs.
+    """
+    if not design_id:
+        return {"success": False, "error": "design_id is required"}
+
+    async def op(store: github_store.GitHubStore) -> dict[str, Any]:
+        versions = await store.list_versions(design_id)
+        return {"success": True, "design_id": design_id, "count": len(versions), "versions": versions}
 
     return await _run_github(npub, op)
 

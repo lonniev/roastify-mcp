@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Fetch offers a version picker — choose which committed version to apply.** New
+  `roastify_list_design_versions(design_id)` returns a design's git history (sha, date,
+  commit message, version tag), and `roastify_fetch_design` takes an optional `ref`
+  (commit sha or tag) to fetch that exact version. In the courier, Fetch on a design with
+  more than one version opens a picker (date · tag · message); pick one and it applies
+  that version (latest when there's only one). The store reads a file at any ref.
 - **Commit now takes a required commit message and version tag.** The courier prompts
   for both (neither may be blank) before a Commit; `stash_design` rejects a blank
   message or tag, and the store writes the message as the git commit message and creates
