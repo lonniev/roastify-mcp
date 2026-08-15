@@ -122,11 +122,14 @@ function main(): void {
   sh.innerHTML = `
     <style>
       :host{all:initial}
-      .p{position:fixed;top:16px;right:16px;z-index:2147483647;width:min(420px,calc(100vw - 24px));
+      .p{position:fixed;top:16px;right:16px;z-index:2147483647;width:min(560px,calc(100vw - 24px));
         font-family:ui-monospace,Menlo,monospace;color:#e8ece6;background:#171b1a;
         border:1px solid #2c3432;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.5);
         display:flex;flex-direction:column;max-height:calc(100vh - 32px)}
-      .p.big{width:min(680px,calc(100vw - 24px))}
+      .p.big{width:min(920px,calc(100vw - 24px))}
+      .rz{position:absolute;right:2px;bottom:2px;width:16px;height:16px;cursor:nwse-resize;
+        border-right:2px solid #4a544f;border-bottom:2px solid #4a544f;
+        border-bottom-right-radius:11px;touch-action:none}
       .h{display:flex;align-items:center;gap:6px;padding:10px 14px;background:#0d100f;
         cursor:move;user-select:none;flex:0 0 auto;border-radius:12px 12px 0 0}
       .h b{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#4fbfc0;flex:1}
@@ -231,7 +234,14 @@ function main(): void {
     el.scrollTop = 1e9;
   };
   $("x").onclick = () => host.remove();
-  $("exp").onclick = () => (sh.querySelector(".p") as HTMLElement).classList.toggle("big");
+  const SIZE_KEY = "rcourier-size";
+  const panelEl = () => sh.querySelector(".p") as HTMLElement;
+  $("exp").onclick = () => {
+    const p = panelEl();
+    p.style.width = ""; p.style.maxHeight = "";          // clear any custom resize
+    try { localStorage.removeItem(SIZE_KEY); } catch { /* private mode */ }
+    p.classList.toggle("big");
+  };
 
   (() => {
     let dx = 0, dy = 0, on = false;
@@ -247,6 +257,51 @@ function main(): void {
       p.style.left = e.clientX - dx + "px"; p.style.top = e.clientY - dy + "px"; p.style.right = "auto";
     };
     h.onpointerup = () => { on = false; };
+  })();
+
+  // Resizable via a bottom-right grip; the chosen size persists across reloads.
+  (() => {
+    const p = panelEl();
+    try {
+      const s = JSON.parse(localStorage.getItem(SIZE_KEY) || "null");
+      if (s && typeof s.w === "number") {
+        p.style.width = s.w + "px";
+        if (typeof s.mh === "number") p.style.maxHeight = s.mh + "px";
+      }
+    } catch { /* first run / private mode */ }
+    const grip = document.createElement("div");
+    grip.className = "rz";
+    grip.title = "Drag to resize";
+    p.appendChild(grip);
+    let on = false, sx = 0, sy = 0, sw = 0, sh2 = 0;
+    grip.addEventListener("pointerdown", (e) => {
+      const r = p.getBoundingClientRect();
+      // Pin the top-left corner so the grip grows the panel right/down predictably,
+      // whether it was right-anchored (default) or moved (left/top).
+      p.style.left = r.left + "px"; p.style.top = r.top + "px"; p.style.right = "auto";
+      sx = e.clientX; sy = e.clientY; sw = r.width; sh2 = r.height;
+      on = true;
+      try { grip.setPointerCapture(e.pointerId); } catch { /* older engines */ }
+      e.preventDefault();
+    });
+    grip.addEventListener("pointermove", (e) => {
+      if (!on) return;
+      const r = p.getBoundingClientRect();
+      const w = Math.max(320, Math.min(window.innerWidth - r.left - 8, sw + (e.clientX - sx)));
+      const mh = Math.max(220, Math.min(window.innerHeight - r.top - 8, sh2 + (e.clientY - sy)));
+      p.style.width = w + "px";
+      p.style.maxHeight = mh + "px";
+    });
+    grip.addEventListener("pointerup", (e) => {
+      if (!on) return;
+      on = false;
+      try { grip.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+      try {
+        localStorage.setItem(SIZE_KEY, JSON.stringify({
+          w: parseInt(p.style.width, 10), mh: parseInt(p.style.maxHeight, 10),
+        }));
+      } catch { /* private mode — size just won't persist */ }
+    });
   })();
 
   // ---- login (standard DM-proof; reused from the Bench) --------------------

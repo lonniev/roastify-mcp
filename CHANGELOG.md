@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The courier panel is wider and resizable.** Default width is 560px (was 420),
+  expand goes to 920px, and a bottom-right grip drags the panel to any size — the chosen
+  width/height persists across reloads (`localStorage`). Expand resets to a preset.
+
 ### Fixed
 
 - **Fetch now actually applies the description (correct product field names).** The
