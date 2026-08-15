@@ -1,0 +1,227 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roastify Design Bench — manage a whole coffee line at once</title>
+<meta name="description" content="Version your coffee-box designs in git, edit a whole line of SKUs in one AI pass, and sync straight to Shopify — through Roastify MCP.">
+<style>
+  :root{
+    --paper:#F2F4F1;--ink:#14171A;--ink2:#3B4248;--ink3:#69737A;--rule:#C9D1CA;
+    --dieline:#0D7C7F;--kraft:#A9713C;--surface:#FBFCFA;--amber:#B5791F;--card:#FFFFFF
+  }
+  @media(prefers-color-scheme:dark){:root{
+    --paper:#101312;--ink:#EAEEEA;--ink2:#B4BDB6;--ink3:#828D86;--rule:#2C3432;
+    --dieline:#4FBFC0;--kraft:#C9924F;--surface:#171B1A;--amber:#D9A441;--card:#161A19
+  }}
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Avenir Next","Segoe UI",system-ui,sans-serif;line-height:1.6}
+  .wrap{max-width:900px;margin:0 auto;padding:0 20px}
+  a{color:var(--dieline)}
+  .eyebrow{font-family:ui-monospace,Menlo,monospace;font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink3)}
+  h1{font-family:ui-monospace,Menlo,monospace;letter-spacing:-.02em;line-height:1.15;margin:.3rem 0 0}
+  h2{font-size:19px;margin:0 0 6px;letter-spacing:-.01em}
+  .lede{color:var(--ink2)}
+  code{background:var(--surface);border:1px solid var(--rule);border-radius:4px;
+    padding:1px 6px;font-family:ui-monospace,Menlo,monospace;font-size:.85em}
+  .cut{border:0;border-top:1.5px dashed var(--rule);margin:0;opacity:.7}
+
+  /* hero */
+  .hero{position:relative;overflow:hidden;border-bottom:1.5px dashed var(--rule)}
+  .hero .wash{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(60% 80% at 85% -10%, color-mix(in srgb, var(--kraft) 22%, transparent), transparent 70%)}
+  .hero-inner{position:relative;padding:52px 0 44px}
+  .brandmark{display:inline-flex;align-items:center;gap:10px;margin-bottom:22px}
+  .dot{width:11px;height:11px;border-radius:999px;background:var(--kraft);box-shadow:0 0 0 4px color-mix(in srgb,var(--kraft) 22%,transparent)}
+  .brandmark b{font-weight:700}.brandmark span{color:var(--ink3)}
+  .headline{font-size:clamp(27px,4.8vw,42px);max-width:16ch}
+  .subhead{margin:16px 0 0;font-size:clamp(15px,2vw,18px);color:var(--ink2);max-width:56ch}
+  .cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}
+  .btn{display:inline-block;text-decoration:none;font-weight:700;border-radius:9px;
+    padding:12px 20px;font-family:ui-monospace,Menlo,monospace;font-size:14px}
+  .btn.primary{background:var(--dieline);color:#0b1211}
+  .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--rule)}
+  .btn.ghost:hover{border-color:var(--dieline)}
+
+  /* screenshot slot */
+  .shot{margin:34px 0 0;border:1px solid var(--rule);border-radius:12px;overflow:hidden;
+    background:var(--card);box-shadow:0 18px 50px -28px rgba(0,0,0,.5)}
+  .shot img{display:block;width:100%;height:auto}
+  .shot .ph{aspect-ratio:16/9;display:grid;place-items:center;text-align:center;
+    background:
+      repeating-linear-gradient(45deg,transparent,transparent 11px,color-mix(in srgb,var(--rule) 40%,transparent) 11px,color-mix(in srgb,var(--rule) 40%,transparent) 12px),
+      var(--surface);
+    color:var(--ink3);font-family:ui-monospace,Menlo,monospace;font-size:13px;padding:20px}
+
+  section{padding:44px 0}
+  .grid3{display:grid;gap:16px;grid-template-columns:repeat(3,1fr)}
+  @media(max-width:720px){.grid3{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:18px}
+  .card .n{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--kraft);font-weight:700}
+  .card p{margin:.5rem 0 0;color:var(--ink2);font-size:14px}
+
+  .steps{counter-reset:s;display:grid;gap:14px;margin:18px 0 0;padding:0;list-style:none}
+  .steps li{position:relative;padding:16px 16px 16px 58px;background:var(--card);
+    border:1px solid var(--rule);border-radius:12px}
+  .steps li::before{counter-increment:s;content:counter(s);position:absolute;left:16px;top:15px;
+    width:28px;height:28px;border-radius:999px;background:var(--dieline);color:#0b1211;
+    display:grid;place-items:center;font-family:ui-monospace,Menlo,monospace;font-weight:700;font-size:14px}
+  .steps li b{display:block}
+  .steps li .d{color:var(--ink2);font-size:14px;margin-top:2px}
+
+  .note{border-left:3px solid var(--kraft);background:var(--surface);padding:12px 16px;
+    border-radius:0 6px 6px 0;color:var(--ink2);font-size:14px}
+  .note b{color:var(--ink)}
+
+  .foot{border-top:1.5px dashed var(--rule);padding:24px 0 60px;text-align:center;
+    color:var(--ink3);font-size:12.5px}
+  .foot a{color:var(--amber)}
+  .kicker{font-size:clamp(19px,2.6vw,24px);font-weight:700;max-width:30ch;letter-spacing:-.01em}
+</style>
+
+<div class="hero">
+  <div class="wash" aria-hidden="true"></div>
+  <div class="wrap hero-inner">
+    <div class="brandmark">
+      <span class="dot"></span>
+      <b>Roastify</b> <span>Design Bench</span>
+    </div>
+    <h1 class="headline">Run a whole coffee line without hand-editing one box at a time.</h1>
+    <p class="subhead">Roastify’s Design Studio lays out beautiful boxes — one at a time, by hand,
+      with no history and no undo. The Design Bench adds the three things a growing catalog needs:
+      version control, bulk AI editing, and a straight line to Shopify.</p>
+    <div class="cta">
+      <a class="btn primary" href="/tools/">Get the courier →</a>
+      <a class="btn ghost" href="#start">How to get started</a>
+    </div>
+
+    <figure class="shot" style="margin-bottom:0">
+      <!-- Drop a screenshot named courier-hero.png in this folder to replace the placeholder. -->
+      <picture>
+        <img src="courier-hero.png" alt="The Design Courier panel open on a Roastify product"
+             onerror="this.closest('figure').querySelector('.ph').style.display='grid';this.style.display='none'">
+      </picture>
+      <div class="ph" style="display:none">☕ Courier panel — screenshot goes here<br>(the courier open on a real product)</div>
+    </figure>
+  </div>
+</div>
+
+<section class="wrap">
+  <p class="eyebrow">what changed</p>
+  <h2 class="kicker">An undo button, a bulk editor, and a bridge to your storefront.</h2>
+  <div class="grid3" style="margin-top:20px">
+    <div class="card">
+      <div class="n">01 · versioned</div>
+      <b>Every design is a git commit.</b>
+      <p>A design stops being a 2.3&nbsp;MB opaque blob and becomes a folder in your own private
+        GitHub repo — layout, text, and artwork. Real history, real rollback, real what-if.
+        “What did the Colombia label look like before I changed the roast scale?” now has an answer.</p>
+    </div>
+    <div class="card">
+      <div class="n">02 · bulk</div>
+      <b>An AI agent does the tedious pass.</b>
+      <p>Ask an agent to fetch a set of designs, change the origin line, nudge the roast scale, and
+        keep the type consistent — across the whole line, in one pass. It edits text, geometry, and
+        fills, and commits each one with a real message and a version tag.</p>
+    </div>
+    <div class="card">
+      <div class="n">03 · synced</div>
+      <b>It flows through to Shopify.</b>
+      <p>Paired with Shopify’s own tools, the edited products move out to your storefront — new SKUs
+        and edits alike. Design in one place, ship to the store, done.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="cut">
+
+<section class="wrap">
+  <p class="eyebrow">how it works</p>
+  <h2 class="kicker">Three actors, one clean division of labor.</h2>
+  <div class="grid3" style="margin-top:20px">
+    <div class="card">
+      <b>The courier</b>
+      <p>A tiny button that runs inside Roastify on your own login. It does the two steps that need
+        your session: send a product’s design up to the library, and apply a finished design back
+        onto a product. Nothing else touches Roastify’s authenticated screen.</p>
+    </div>
+    <div class="card">
+      <b>The agent</b>
+      <p>Your AI assistant, connected to Roastify MCP, reads the catalog and edits a design’s words,
+        layout, and colors — everything between the two courier steps. No pixel-nudging by hand.</p>
+    </div>
+    <div class="card">
+      <b>The library</b>
+      <p>A private per-merchant GitHub repo is the store as version control. Browse it in GitHub,
+        diff any change, roll back a bad edit — a design is a readable folder, not a mystery row.</p>
+    </div>
+  </div>
+  <p class="note" style="margin-top:20px"><b>Why a courier at all?</b> Roastify has no public API for
+    design writes — they live behind a browser session. So instead of waiting for an API, the Bench
+    brings its own seam: a userscript, served from this site, that lets your agent work through the
+    page you’re already signed into.</p>
+</section>
+
+<hr class="cut">
+
+<section class="wrap" id="start">
+  <p class="eyebrow">get started</p>
+  <h2 class="kicker">Connect once, then pay only for what you use.</h2>
+  <p class="lede" style="margin:8px 0 0;max-width:60ch">No account to create, no email, no
+    subscription, no KYC. Your identity is a Nostr key (an <code>npub</code>), and you top up a
+    balance in Bitcoin&nbsp;Lightning sats — the agent spends a few as it works.</p>
+  <ol class="steps">
+    <li>
+      <b>Open the Design Bench and sign in with your npub.</b>
+      <div class="d">New to Nostr? Any Nostr client makes a key in a minute. On the Bench, you’ll
+        hand over your own Roastify API key through an encrypted direct message — it’s vaulted
+        encrypted, and the browser never sees it again.</div>
+    </li>
+    <li>
+      <b>Top up your balance.</b>
+      <div class="d">Fund a few sats over Bitcoin Lightning from the Wallet. You pay per call as the
+        agent works — nothing up front, nothing recurring.</div>
+    </li>
+    <li>
+      <b>Install the courier on Roastify.</b>
+      <div class="d">A one-time button for Mac, iPad, or iPhone. Full instructions are on the
+        <a href="/tools/">design-tools page</a> — it always loads the latest courier, so you never
+        reinstall it.</div>
+    </li>
+    <li>
+      <b>Point your AI agent at Roastify MCP.</b>
+      <div class="d">Connect an MCP-capable assistant to
+        <code>https://roastify-mcp.fastmcp.app/mcp</code>, then just ask: “version these designs,
+        fix the roast scale across the line, and push them back.”</div>
+    </li>
+  </ol>
+  <div class="cta" style="margin-top:24px">
+    <a class="btn primary" href="/">Open the Design Bench →</a>
+    <a class="btn ghost" href="/tools/">Courier install steps</a>
+  </div>
+</section>
+
+<hr class="cut">
+
+<section class="wrap">
+  <p class="eyebrow">for fellow roasters</p>
+  <h2 class="kicker">Built for anyone who runs more coffee than they can hand-edit.</h2>
+  <p class="lede" style="margin-top:8px;max-width:62ch">This isn’t a private tool. If you’re a
+    Roastify merchant with more than a handful of products, Roastify MCP is live and open to you:
+    version your designs, edit a whole line of SKUs in one agent pass, and sync it to Shopify — no
+    code to write, no API to wait for. A preview of how DPYC agents slot into tools that were never
+    designed to let them in.</p>
+</section>
+
+<div class="foot">
+  <div>
+    Roastify Design Bench ·
+    <a href="https://github.com/lonniev/roastify-mcp">source</a> ·
+    <a href="https://roastify.app">Roastify</a>
+  </div>
+  <div style="margin-top:6px">
+    Monetized with <a href="https://tollbooth-dpyc.com">Tollbooth&nbsp;DPYC™</a> ·
+    operator-controlled dynamic pricing · Apache-2.0 · Patent&nbsp;Pending (US&nbsp;Prov.&nbsp;64/045,999)
+  </div>
+</div>
