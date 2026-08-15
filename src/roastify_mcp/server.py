@@ -887,6 +887,7 @@ async def update_design_text(
             skeleton, design_id=design_id,
             label=label or found["label"],
             product_id=found["product_id"], source_title=found["source_title"],
+            repair=True,  # heal Roastify's lossy migrated fonts[] on every save
         )
         return {
             "success": True,
@@ -1006,6 +1007,7 @@ async def add_design_element(
         meta = await store.put_design(
             design, design_id=design_id, label=label or found["label"],
             product_id=found["product_id"], source_title=found["source_title"],
+            repair=True,  # heal Roastify's lossy migrated fonts[] on every save
         )
         return {
             "success": True,
@@ -1096,6 +1098,7 @@ async def move_elements(
         meta = await store.put_design(
             design, design_id=design_id, label=label or found["label"],
             product_id=found["product_id"], source_title=found["source_title"],
+            repair=True,  # heal Roastify's lossy migrated fonts[] on every save
         )
         return {
             "success": True,
