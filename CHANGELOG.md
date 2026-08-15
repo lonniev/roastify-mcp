@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Every design commit an AI agent makes now requires a real commit message and the
+  next semver version.** `update_design_text`, `add_design_element`, `move_elements`, and
+  `set_product_description` — the agent-facing edit tools, which used to auto-commit with a
+  generic message and no tag — now take required `commit_message` + `version_tag`. Tool
+  metadata prompts a *specific* message (what changed and why, not the human dev's lazy
+  "save this") and the *next* semver (check `list_design_versions` and increment), and a
+  shared `_check_commit` guard rejects placeholder messages (`save`/`update`/`wip`/…),
+  too-short messages, and non-semver/`v`-prefixed versions. `stash_design` uses the same
+  guard. So each commit lands with a meaningful message and a proper version in the picker.
+
+### Changed
+
 - **The courier panel is wider and resizable.** Default width is 560px (was 420),
   expand goes to 920px, and a bottom-right grip drags the panel to any size — the chosen
   width/height persists across reloads (`localStorage`). Expand resets to a preset.
