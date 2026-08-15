@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`update_design_text` accepts multi-key `edits` delivered as a JSON string**
+  (field report roastify-mcp#38). FastMCP/Pydantic validate tool args with
+  `validate_python`, so a stringified object failed schema validation
+  (`Input should be a valid dictionary`) while a native dict succeeded —
+  batching two layer edits into one call (one commit) was rejected even though
+  the same keys worked as two single-key calls. `edits` is now
+  `Annotated[dict[str, str], BeforeValidator(coerce_str_dict)]`: the published
+  schema stays an object, and a JSON object string is parsed before the body
+  runs. This closes roastify-mcp#38.
+
 ### Added
 
 - **Design library entries carry git traceability** (field report roastify-mcp#35, ask #3).
