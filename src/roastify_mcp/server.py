@@ -161,6 +161,7 @@ GET_DESIGN_TEXT_UUID     = "2569b7b5-a380-59fa-a60b-32c3666c1e1b"
 UPDATE_DESIGN_TEXT_UUID  = "0acef2a3-c54a-5134-a30b-9a15e01b98d5"
 ADD_DESIGN_ELEMENT_UUID  = "d786f8d9-16a9-5e32-84ed-26edadc10ba9"
 MOVE_ELEMENTS_UUID       = "8b69215b-1d6d-54ad-9e20-14460d123f40"
+SET_PRODUCT_DESCRIPTION_UUID = "bb3a11fb-8d9f-5b83-beae-f8ef2e7501d1"
 
 _DOMAIN_TOOLS = [
     ToolIdentity(
@@ -233,6 +234,10 @@ _DOMAIN_TOOLS = [
     ToolIdentity(
         tool_id=MOVE_ELEMENTS_UUID, capability="move_elements", category="write",
         intent="Shift a group of elements together and/or resize elements, saved as a new design",
+    ),
+    ToolIdentity(
+        tool_id=SET_PRODUCT_DESCRIPTION_UUID, capability="set_product_description", category="write",
+        intent="Set the product's store-page description on a stored design, committed in place",
     ),
 ]
 
@@ -822,7 +827,11 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
       tight a layer is; to change a label's `fontSize` (or its wrap frame), use
       roastify_move_elements.
 
-    Pair with roastify_update_design_text to save your changes.
+    Also returns `description` — the product's store-page prose (outside the design,
+    syncs to Shopify), versioned with the design. Refine it and write it back with
+    roastify_set_product_description.
+
+    Pair with roastify_update_design_text to save text changes.
 
     Args:
         design_id: The id from roastify_list_designs.
@@ -852,6 +861,9 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
             "label": found["label"],
             "product_id": found["product_id"],
             "product_type": product_type,
+            # The product's store-page description (prose, outside the design), versioned
+            # with the design. Refine it and write it back with set_product_description.
+            "description": found.get("description", ""),
             "sheet": github_store.sheet_size(skeleton),
             "panels": panels,
             "count": len(layers),
@@ -1148,6 +1160,53 @@ async def move_elements(
             "elements_changed": changed,
             "unknown_ids": missing,
             "elements": elements,
+        }
+
+    return await _run_github(npub, op)
+
+
+@tool
+@runtime.paid_tool(SET_PRODUCT_DESCRIPTION_UUID)
+async def set_product_description(
+    design_id: str,
+    description: str,
+    label: str = "",
+    npub: _NPUB = "",
+    dpop_token: str = "",
+) -> dict[str, Any]:
+    """Set the product's store-page DESCRIPTION on a stored design, committed in place.
+
+    The description is the product's store-page prose — it lives OUTSIDE the design
+    artwork and, on Roastify, syncs to Shopify. It is versioned WITH the design in your
+    git library: read the current one from `roastify_get_design_text` (its `description`
+    field — Roastify's own auto-generated copy is a helpful starting point), refine it,
+    and write it back here. This commits a new version of the SAME design_id (git tracks
+    the diff); it does NOT touch Roastify. The browser courier applies it onto the product
+    on the next Fetch (skipped there if Shopify has locked the field).
+
+    Args:
+        design_id: The design to edit, from roastify_list_designs.
+        description: The new store-page description prose.
+        label: Rename the design (optional). Defaults to keeping its current label.
+    """
+    if not design_id:
+        return {"success": False, "error": "design_id is required"}
+
+    async def op(store: github_store.GitHubStore) -> dict[str, Any]:
+        found = await store.get_skeleton(design_id)
+        if found is None:
+            return {"success": False, "error": f"no design '{design_id}' in your library"}
+        meta = await store.put_design(
+            found["skeleton"], design_id=design_id,
+            label=label or found["label"],
+            product_id=found["product_id"], source_title=found["source_title"],
+            description=description, repair=True,
+        )
+        return {
+            "success": True,
+            "design_id": meta["design_id"],
+            "label": meta["label"],
+            "description": meta["description"],
         }
 
     return await _run_github(npub, op)
