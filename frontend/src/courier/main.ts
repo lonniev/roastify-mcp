@@ -197,23 +197,29 @@ function main(): void {
         font-family:ui-monospace,Menlo,monospace;word-break:break-all}
       .item .id a.sha{color:#4fbfc0;text-decoration:none}
       .item .id a.sha:hover{text-decoration:underline}
-      .ovl{position:absolute;inset:0;background:rgba(8,10,9,.74);border-radius:12px;z-index:5;
-        display:flex;align-items:center;justify-content:center;padding:14px}
-      .ovlbox{background:#171b1a;border:1px solid #2c3432;border-radius:10px;padding:12px;
-        width:100%;max-height:82%;overflow:auto;display:flex;flex-direction:column;gap:8px}
-      .ovlh{font-size:12px;color:#4fbfc0;text-transform:uppercase;letter-spacing:.06em}
+      /* Floating, draggable cards (version picker, confirm dialogs). Free-floating in
+         the shadow root with NO covering backdrop, each with its own drag header — so
+         several UX frames can be arranged on screen together instead of one hiding the rest. */
+      .card{position:fixed;z-index:2147483647;width:min(380px,calc(100vw - 24px));
+        background:#171b1a;border:1px solid #2c3432;border-radius:12px;
+        box-shadow:0 14px 44px rgba(0,0,0,.55);display:flex;flex-direction:column;
+        max-height:calc(100vh - 40px)}
+      .card .ch{display:flex;align-items:center;gap:8px;padding:9px 10px 9px 14px;background:#0d100f;
+        cursor:move;user-select:none;border-radius:12px 12px 0 0}
+      .card .ch b{flex:1;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#4fbfc0}
+      .cb{padding:12px 14px 14px;display:flex;flex-direction:column;gap:8px;overflow:auto}
       .vrow{display:flex;flex-direction:column;gap:2px;align-items:flex-start;text-align:left;
         background:#141817;border:1px solid #2c3432;color:#e8ece6;font-weight:400;padding:8px 10px}
       .vrow .vtop{font-size:12px;font-weight:700}
       .vrow .vtag{color:#4fbfc0}
       .vrow .vmsg{font-size:11px;color:#a9b2ac;word-break:break-word}
       .vrow .vsha{font-size:10px;color:#5f6b64;font-family:ui-monospace,Menlo,monospace}
-      .ovlbox .fline{font-size:12px;color:#c7cdc6;line-height:1.5}
-      .ovlbox label{margin-top:8px;margin-bottom:3px}
-      .ovlbox textarea{width:100%;min-height:52px;resize:vertical;background:#101312;color:#e8ece6;
+      .cb .fline{font-size:13px;color:#c7cdc6;line-height:1.5}
+      .cb label{margin-top:8px;margin-bottom:3px}
+      .cb textarea{width:100%;min-height:52px;resize:vertical;background:#101312;color:#e8ece6;
         border:1px solid #2c3432;border-radius:8px;padding:9px;font:inherit;font-size:14px;box-sizing:border-box}
-      .ovlbox .fhint{font-size:10px;color:#828d86;margin-top:3px}
-      .ovlbox .ferr{font-size:11px;color:#dc8a6f;margin-top:3px}
+      .cb .fhint{font-size:11px;color:#828d86;margin-top:3px}
+      .cb .ferr{font-size:12px;color:#dc8a6f;margin-top:3px}
       .frow{display:flex;gap:8px;margin-top:12px}
       .frow button{flex:1}
       #work{flex-direction:column;gap:12px}
@@ -279,7 +285,7 @@ function main(): void {
   const makeDraggable = (p: HTMLElement, h: HTMLElement) => {
     let dx = 0, dy = 0, on = false;
     h.onpointerdown = (e: PointerEvent) => {
-      if ((e.target as HTMLElement)?.classList.contains("ic")) return;
+      if ((e.target as HTMLElement)?.closest(".ic")) return;   // don't drag when tapping a header icon
       on = true; dx = e.clientX - p.offsetLeft; dy = e.clientY - p.offsetTop;
       h.setPointerCapture(e.pointerId);
     };
@@ -304,9 +310,36 @@ function main(): void {
   };
   $("pop").onclick = () => (p2On() ? dock() : popOut());
   $("dock").onclick = dock;
-  // Overlays (version picker, confirm dialogs) must appear over whichever window
-  // currently holds the Library, or they'd pop up on an empty main panel.
-  const libHost = (): HTMLElement => (p2On() ? $("p2") : (sh.querySelector(".p") as HTMLElement));
+
+  // A free-floating, draggable card in the shadow root — the base for the version
+  // picker and the confirm dialogs. Unlike a modal it does NOT cover the panel, so
+  // several frames can be arranged on screen together. Returns its body to fill and
+  // a close(). Successive cards cascade so a new one doesn't land exactly on the last.
+  let cardSeq = 0;
+  const floatCard = (title: string): { body: HTMLElement; close: () => void } => {
+    const el = document.createElement("div");
+    el.className = "card";
+    const off = 30 + (cardSeq++ % 6) * 28;
+    el.style.left = off + "px";
+    el.style.top = off + "px";
+    const h = document.createElement("div");
+    h.className = "ch";
+    const b = document.createElement("b");
+    b.textContent = title;
+    const x = document.createElement("span");
+    x.className = "ic";
+    x.title = "Close";
+    x.innerHTML = IC.close;
+    h.append(b, x);
+    const body = document.createElement("div");
+    body.className = "cb";
+    el.append(h, body);
+    sh.appendChild(el);
+    makeDraggable(el, h);
+    const close = () => el.remove();
+    x.onclick = close;
+    return { body, close };
+  };
 
   // Resizable via a bottom-right grip; the chosen size persists across reloads.
   (() => {
@@ -582,22 +615,15 @@ function main(): void {
   // One in-panel modal: consequence lines, optional fields (validated), and
   // Confirm/Cancel. Resolves to the field values (an empty object when there are no
   // fields), or null on cancel. Replaces the confirm()/prompt() stack.
-  const modalForm = (opts: { title: string; lines: string[]; fields?: ModalField[]; confirmLabel?: string; host?: HTMLElement }):
+  const modalForm = (opts: { title: string; lines: string[]; fields?: ModalField[]; confirmLabel?: string }):
     Promise<Record<string, string> | null> =>
     new Promise((resolve) => {
-      const ov = document.createElement("div");
-      ov.className = "ovl";
-      const box = document.createElement("div");
-      box.className = "ovlbox";
-      const h = document.createElement("div");
-      h.className = "ovlh";
-      h.textContent = opts.title;
-      box.appendChild(h);
+      const { body, close } = floatCard(opts.title);
       for (const ln of opts.lines) {
         const d = document.createElement("div");
         d.className = "fline";
         d.textContent = ln;
-        box.appendChild(d);
+        body.appendChild(d);
       }
       const inputs: Record<string, HTMLInputElement | HTMLTextAreaElement> = {};
       const errs: Record<string, HTMLElement> = {};
@@ -605,22 +631,22 @@ function main(): void {
       for (const f of fields) {
         const lab = document.createElement("label");
         lab.textContent = f.label;
-        box.appendChild(lab);
+        body.appendChild(lab);
         const inp = f.multiline ? document.createElement("textarea") : document.createElement("input");
         if (f.placeholder) inp.placeholder = f.placeholder;
         inp.setAttribute("autocapitalize", "off");
         inp.spellcheck = false;
-        box.appendChild(inp);
+        body.appendChild(inp);
         inputs[f.key] = inp;
         if (f.hint) {
           const hn = document.createElement("div");
           hn.className = "fhint";
           hn.textContent = f.hint;
-          box.appendChild(hn);
+          body.appendChild(hn);
         }
         const er = document.createElement("div");
         er.className = "ferr";
-        box.appendChild(er);
+        body.appendChild(er);
         errs[f.key] = er;
       }
       const row = document.createElement("div");
@@ -631,8 +657,8 @@ function main(): void {
       const ok = document.createElement("button");
       ok.textContent = opts.confirmLabel ?? "Confirm";
       row.append(cancel, ok);
-      box.appendChild(row);
-      const done = (v: Record<string, string> | null) => { ov.remove(); resolve(v); };
+      body.appendChild(row);
+      const done = (v: Record<string, string> | null) => { close(); resolve(v); };
       cancel.onclick = () => done(null);
       ok.onclick = () => {
         const out: Record<string, string> = {};
@@ -646,8 +672,6 @@ function main(): void {
         }
         if (!bad) done(out);
       };
-      ov.appendChild(box);
-      (opts.host ?? (sh.querySelector(".p") as HTMLElement)).appendChild(ov);
       (fields.length ? inputs[fields[0].key] : ok).focus();
     });
 
@@ -722,7 +746,6 @@ function main(): void {
         "This changes the product on Roastify.",
       ],
       confirmLabel: "⬇ Fetch",
-      host: libHost(),
     });
     if (!proceed) return;
     log(`applying “${name}” (${ver}) → “${labelOf(target)}”…`);
@@ -754,17 +777,10 @@ function main(): void {
 
   // Modal over the panel: pick which committed version to fetch. Resolves to the
   // chosen version, or null if cancelled.
-  const pickVersion = (versions: StoredVersion[], host: HTMLElement): Promise<StoredVersion | null> =>
+  const pickVersion = (versions: StoredVersion[]): Promise<StoredVersion | null> =>
     new Promise((resolve) => {
-      const ov = document.createElement("div");
-      ov.className = "ovl";
-      const box = document.createElement("div");
-      box.className = "ovlbox";
-      const h = document.createElement("div");
-      h.className = "ovlh";
-      h.textContent = "Pick a version to fetch";
-      box.appendChild(h);
-      const done = (v: StoredVersion | null) => { ov.remove(); resolve(v); };
+      const { body: box, close } = floatCard("Pick a version to fetch");
+      const done = (v: StoredVersion | null) => { close(); resolve(v); };
       for (const v of versions) {
         const row = document.createElement("button");
         row.className = "vrow";
@@ -792,8 +808,6 @@ function main(): void {
       cancel.textContent = "Cancel";
       cancel.onclick = () => done(null);
       box.appendChild(cancel);
-      ov.appendChild(box);
-      host.appendChild(ov);
     });
 
   // Fetch entry point: offer a version picker when a design has more than one
@@ -806,7 +820,7 @@ function main(): void {
       const lv = await api.listVersions(meta.design_id);
       const versions = lv.versions || [];
       if (versions.length > 1) {
-        picked = await pickVersion(versions, libHost());
+        picked = await pickVersion(versions);
         if (!picked) { log("fetch cancelled."); return; }
         ref = picked.sha;
       }
@@ -828,7 +842,6 @@ function main(): void {
         "It does not touch any product on Roastify or Shopify.",
       ],
       confirmLabel: "🗑 Delete",
-      host: libHost(),
     });
     if (!ok) return;
     log(`deleting “${name}”…`);
