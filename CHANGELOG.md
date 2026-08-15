@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Read and set element `fill`/`stroke` — so an agent can audit and correct the roast
+  scale.** `get_design_text` now returns each non-text element's `fill` and `stroke`
+  colours (previously id/type/name/bounds only), so an agent can see which roast-scale
+  dots are filled (a filled dot has a dark `fill`, an empty one none). `move_elements`
+  now accepts `fill`/`stroke` on any element (colour strings), so an agent can fill or
+  empty a dot to match a coffee's roast level. Filed via Scout as the capability gap
+  that blocked auditing/correcting the scale.
+
 ### Fixed
 
 - **`list_design_versions` now includes description-only commits and their tags.** The

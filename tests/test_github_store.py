@@ -586,3 +586,20 @@ def test_check_commit_rejects_lazy_messages_and_bad_semver():
     assert srv._check_commit("Shorten the tasting blurb to fit", "1.2")
     # a specific message + real semver passes
     assert srv._check_commit("Shorten the tasting blurb to fit the front panel", "1.2.3") == ""
+
+
+def test_non_text_elements_exposes_fill_and_stroke():
+    d = {"elements": [{"type": "shape", "id": "dot", "name": "roast", "x": 1, "y": 2,
+                       "width": 28, "height": 28, "fill": "rgba(0,0,0,1)", "stroke": "#333"}]}
+    els = gs.non_text_elements(d)
+    assert els[0]["fill"] == "rgba(0,0,0,1)" and els[0]["stroke"] == "#333"
+
+
+def test_edit_geometry_sets_fill_to_fill_or_empty_a_roast_dot():
+    d = {"elements": [{"type": "shape", "id": "dot", "x": 1, "y": 2, "width": 28,
+                       "height": 28, "fill": "rgba(0,0,0,0)"}]}
+    changed, missing = gs.edit_geometry(d, [{"id": "dot", "fill": "rgba(0,0,0,1)"}])
+    assert changed == 1 and missing == []
+    assert d["elements"][0]["fill"] == "rgba(0,0,0,1)"
+    # geometry untouched when only fill is set
+    assert d["elements"][0]["x"] == 1 and d["elements"][0]["width"] == 28
