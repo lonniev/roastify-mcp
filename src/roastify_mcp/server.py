@@ -691,6 +691,7 @@ async def stash_design(
     label: str = "",
     product_id: str = "",
     source_title: str = "",
+    description: str = "",
     design_id: str = "",
     npub: _NPUB = "",
     dpop_token: str = "",
@@ -710,6 +711,8 @@ async def stash_design(
         label: Your name for this design, e.g. "Ethiopian — light".
         product_id: The Roastify product id it came from, for your reference.
         source_title: The product's title at stash time, for your reference.
+        description: The product's store-page description at stash time, versioned
+            with the design so Fetch can re-apply it to a target product.
         design_id: Optional explicit folder id. Omit and the id is the slug of the
             label, so re-stashing the same design commits a new version in place
             instead of creating a duplicate.
@@ -720,7 +723,8 @@ async def stash_design(
     async def op(store: github_store.GitHubStore) -> dict[str, Any]:
         meta = await store.put_design(
             design, design_id=design_id, label=label,
-            product_id=product_id, source_title=source_title, repair=True,
+            product_id=product_id, source_title=source_title,
+            description=description, repair=True,
         )
         return {"success": True, **meta}
 
@@ -921,6 +925,7 @@ async def update_design_text(
             skeleton, design_id=design_id,
             label=label or found["label"],
             product_id=found["product_id"], source_title=found["source_title"],
+            description=found.get("description", ""),  # preserve the versioned description
             repair=True,  # heal Roastify's lossy migrated fonts[] on every save
         )
         return {
@@ -1041,6 +1046,7 @@ async def add_design_element(
         meta = await store.put_design(
             design, design_id=design_id, label=label or found["label"],
             product_id=found["product_id"], source_title=found["source_title"],
+            description=found.get("description", ""),  # preserve the versioned description
             repair=True,  # heal Roastify's lossy migrated fonts[] on every save
         )
         return {
@@ -1132,6 +1138,7 @@ async def move_elements(
         meta = await store.put_design(
             design, design_id=design_id, label=label or found["label"],
             product_id=found["product_id"], source_title=found["source_title"],
+            description=found.get("description", ""),  # preserve the versioned description
             repair=True,  # heal Roastify's lossy migrated fonts[] on every save
         )
         return {

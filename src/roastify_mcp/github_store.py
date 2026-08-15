@@ -647,7 +647,7 @@ class GitHubStore:
 
     async def put_design(self, design: dict[str, Any], *, design_id: str = "", label: str = "",
                          product_id: str = "", source_title: str = "",
-                         repair: bool = False) -> dict[str, Any]:
+                         description: str = "", repair: bool = False) -> dict[str, Any]:
         # The store is configuration management: a design's identity is the slug of
         # its label, so re-stashing or editing the same design commits a new version
         # of the SAME folder rather than spawning a `<slug>-<hash>` sibling. Two
@@ -660,7 +660,8 @@ class GitHubStore:
         skeleton, assets = externalize(design)
         meta = {
             "design_id": did, "label": label, "product_id": product_id,
-            "source_title": source_title, "updated_at": datetime.now(UTC).isoformat(),
+            "source_title": source_title, "description": description,
+            "updated_at": datetime.now(UTC).isoformat(),
         }
         writes: dict[str, bytes] = {
             f"designs/{did}/design.json": json.dumps(skeleton, indent=1).encode(),
@@ -675,7 +676,7 @@ class GitHubStore:
                     writes[f"assets/{name}"] = raw
             await self._commit(client, f"design: save {label or did}", writes, [])
         return {"design_id": did, "label": label, "product_id": product_id,
-                "source_title": source_title, "assets": len(assets),
+                "source_title": source_title, "description": description, "assets": len(assets),
                 "fonts_repaired": [f["family"] for f in repaired] if repaired is not None else None}
 
     async def get_skeleton(self, design_id: str) -> dict[str, Any] | None:
@@ -688,6 +689,7 @@ class GitHubStore:
         return {
             "design_id": design_id, "label": meta.get("label", ""),
             "product_id": meta.get("product_id", ""), "source_title": meta.get("source_title", ""),
+            "description": meta.get("description", ""),
             "updated_at": meta.get("updated_at", ""), "skeleton": json.loads(raw),
         }
 
@@ -703,7 +705,8 @@ class GitHubStore:
                 raw = await self._get_file(client, f"assets/{name}")
                 if raw is not None:
                     blobs[name] = raw
-        return {**{k: found[k] for k in ("design_id", "label", "product_id", "source_title", "updated_at")},
+        return {**{k: found[k] for k in
+                   ("design_id", "label", "product_id", "source_title", "description", "updated_at")},
                 "design": inline(skeleton, blobs)}
 
     async def list_designs(self) -> list[dict[str, Any]]:
@@ -724,6 +727,7 @@ class GitHubStore:
                     "design_id": name, "label": meta.get("label", ""),
                     "product_id": meta.get("product_id", ""),
                     "source_title": meta.get("source_title", ""),
+                    "description": meta.get("description", ""),
                     "updated_at": meta.get("updated_at", ""),
                     "path": f"designs/{name}/",
                 }

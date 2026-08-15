@@ -405,20 +405,64 @@ function main(): void {
     }
   };
 
+  const getProductById = async (id: string): Promise<Rec | null> => {
+    try {
+      const r = await query("products.getProductById", { productId: id });
+      return r && typeof r === "object" ? (r as Rec) : null;
+    } catch { return null; }
+  };
+
+  // Write a design's stored description onto the target product. This is a
+  // READ-MODIFY-WRITE: updateStoreMetadata replaces the whole store-page record, so
+  // we echo the product's own name/retailPrice/storeMetadata back and change only the
+  // description. Guarded and best-effort: if we can't read name+price we skip rather
+  // than risk zeroing them, and once Shopify owns the product the write may be locked —
+  // we log and move on so the design still lands.
+  const applyDescription = async (target: Rec, description: string): Promise<void> => {
+    if (!description) return;
+    const full = await getProductById(idOf(target));
+    if (!full || typeof full.name !== "string" || full.retailPrice == null) {
+      log("  · description not applied (couldn't read the product's store fields).");
+      return;
+    }
+    try {
+      await mutate("products.updateStoreMetadata", {
+        productId: idOf(target),
+        name: full.name,
+        description,
+        retailPrice: full.retailPrice,
+        storeMetadata: (full.storeMetadata as Rec) ?? {},
+      });
+      log("  ✓ store description applied.");
+    } catch {
+      log("  · store description is locked (likely synced to Shopify) — left unchanged.");
+    }
+  };
+
   // Send this product's design UP to the library.
   $("stash").onclick = async () => {
     const p = PRODUCTS[+val("prod")];
     if (!p) return;
     if (!p.designJson) { log("✗ product has no saved design"); return; }
+    if (!confirm(
+      `Commit “${labelOf(p)}” to your GitHub library?\n\n` +
+      `This saves a NEW VERSION of:\n` +
+      `  • the product's current design\n` +
+      `  • its store-page description\n\n` +
+      `It commits to GitHub only — nothing on Roastify or Shopify changes.`,
+    )) return;
     ($("stash") as HTMLButtonElement).disabled = true;
     log(`reading “${labelOf(p)}”…`);
     try {
       const design = await readDesign(p.designJson);
+      const full = await getProductById(idOf(p));
+      const description = String(full?.description ?? "");
       log(`stashing ${JSON.stringify(design).length.toLocaleString()} bytes…`);
       const r = await api.stash(design, {
         label: labelOf(p),
         productId: idOf(p),
         sourceTitle: labelOf(p),
+        description,
       });
       if (!r.success) { log("✗ " + (r.error || "stash failed")); return; }
       log(`✓ stashed (${r.assets} image(s) deduped). Edit it in the Design Bench.`);
@@ -440,6 +484,16 @@ function main(): void {
       return;
     }
     const name = meta.label || meta.design_id.slice(0, 8);
+    const hasDesc = !!(meta.description && meta.description.trim());
+    if (!confirm(
+      `Fetch “${name}” onto “${labelOf(target)}”?\n\n` +
+      `This OVERWRITES on the product:\n` +
+      `  • its design (open the Designer to see it render)\n` +
+      (hasDesc
+        ? `  • its store-page description — skipped if Shopify has locked it\n`
+        : `  (no saved description travels with this design)\n`) +
+      `\nThis changes the product on Roastify.`,
+    )) return;
     log(`applying “${name}” → “${labelOf(target)}”…`);
     try {
       const r = await api.fetch(meta.design_id);
@@ -461,6 +515,7 @@ function main(): void {
         cleanImageUrl: preview.imageUrl, s3KeyImage: preview.s3Key, imageUrls,
       });
       log(`✓ applied “${name}”. Open “${labelOf(target)}” in the Designer to see it render.`);
+      await applyDescription(target, String(r.description ?? ""));
     } catch (e) {
       log("✗ " + (e as Error).message);
     }
