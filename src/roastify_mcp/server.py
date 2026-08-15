@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from typing import Annotated, Any
 
@@ -726,8 +727,9 @@ async def stash_design(
         description: The product's store-page description at stash time, versioned
             with the design so Fetch can re-apply it to a target product.
         commit_message: The git commit message for this version. Required, non-blank.
-        version_tag: A unique version tag for this commit (git tag, namespaced per
-            design). Required, non-blank; reusing a tag for the same design is refused.
+        version_tag: A unique semver version for this commit — MAJOR.MINOR.PATCH like
+            1.2.3, no leading 'v' (git tag, namespaced per design). Required; reusing a
+            version for the same design is refused.
         design_id: Optional explicit folder id. Omit and the id is the slug of the
             label, so re-stashing the same design commits a new version in place
             instead of creating a duplicate.
@@ -736,8 +738,9 @@ async def stash_design(
         return {"success": False, "error": "design must be a non-empty JSON object"}
     if not commit_message.strip():
         return {"success": False, "error": "commit_message is required and cannot be blank"}
-    if not version_tag.strip():
-        return {"success": False, "error": "version_tag is required and cannot be blank"}
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version_tag.strip()):
+        return {"success": False,
+                "error": "version_tag must be semver MAJOR.MINOR.PATCH (e.g. 1.2.3), no leading 'v'"}
 
     async def op(store: github_store.GitHubStore) -> dict[str, Any]:
         meta = await store.put_design(
