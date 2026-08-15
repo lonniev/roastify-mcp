@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Courier panel: compact, git-native controls that give the designs room.** The
+  full-width Send / Apply / Delete buttons crowded out each design's identity, so:
+  the "Product" selector is relabelled **"Roastify Design"** and gets an explicit
+  dropdown chevron; **Send → an octocat "Commit"** button (compact, top-left); each
+  row's **Apply → an octocat "Fetch"** and **Delete → a bare trashcan**, both small
+  and right-aligned. Freed space now goes to the row's repo path and commit-SHA link.
+  The octocat mark is defined once and reused on Commit and Fetch (both GitHub ops).
+
 ### Fixed
 
 - **`update_design_text` accepts multi-key `edits` delivered as a JSON string**
