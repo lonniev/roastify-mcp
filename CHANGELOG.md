@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The product's store-page description travels with the design, and Fetch re-applies
+  it.** Commit now captures the product's current Roastify `description` into the design's
+  git package (`meta.json`), versioned alongside the artwork; Fetch reads it back and
+  writes it onto the target product via the private `products.updateStoreMetadata`
+  mutation (a read-modify-write that preserves name/price/coffee attributes). The write
+  is **best-effort**: once a product is bound to Shopify the description can lock, so a
+  rejection is logged ("locked — left unchanged") and never fails the design apply.
+  `stash_design` takes a `description`; the edit tools preserve it across text/geometry
+  saves (like `label`); `list_designs`/`fetch_design` return it.
+- **Are-you-sure confirmation on Commit and Fetch**, each spelling out exactly what
+  clicking through will change — Commit: a new git version of the design + description,
+  nothing on Roastify/Shopify; Fetch: overwrites the product's design + description on
+  Roastify (description skipped if Shopify-locked).
+
 ### Changed
 
 - **Courier panel: compact, git-native controls that give the designs room.** The

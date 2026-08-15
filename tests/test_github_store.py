@@ -443,6 +443,18 @@ async def test_list_newest_first_then_delete():
     assert not any(p.startswith(f"designs/{a['design_id']}/") for p in r.files)
 
 
+async def test_description_round_trips_and_survives_edits():
+    r = FakeGitHubStore()
+    desc = "A bright, floral washed Ethiopian — jasmine and bergamot."
+    m = await r.put_design(DESIGN, label="Eth", description=desc)
+    assert m["description"] == desc
+    assert (await r.list_designs())[0]["description"] == desc      # list exposes it
+    assert (await r.get_design(m["design_id"]))["description"] == desc   # fetch exposes it
+    # An edit re-saves the SAME folder omitting description; get_skeleton still
+    # carries it, which is how the edit tools preserve it (like label).
+    assert (await r.get_skeleton(m["design_id"]))["description"] == desc
+
+
 async def test_get_skeleton_never_inlines_the_image():
     r = FakeGitHubStore()
     m = await r.put_design(DESIGN, label="e")

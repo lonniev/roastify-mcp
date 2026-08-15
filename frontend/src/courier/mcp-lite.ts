@@ -119,6 +119,8 @@ export interface StoredDesignMeta {
   bytes: number; updated_at?: string;
   // Git traceability (present when the store could resolve the latest commit).
   path?: string; sha?: string; short_sha?: string; commit_url?: string;
+  // The product's store-page description, versioned with the design.
+  description?: string;
 }
 
 // The small set of calls the courier makes. Authed calls carry the stored
@@ -131,14 +133,16 @@ export const api = {
   list: () =>
     callMcp("list_designs", { npub: store.npub(), dpop_token: store.proof() }) as
       Promise<{ success: boolean; designs?: StoredDesignMeta[]; error?: string }>,
-  stash: (design: Rec, o: { label?: string; productId?: string; sourceTitle?: string; designId?: string }) =>
+  stash: (design: Rec,
+          o: { label?: string; productId?: string; sourceTitle?: string; description?: string; designId?: string }) =>
     callMcp("stash_design", {
       design, label: o.label ?? "", product_id: o.productId ?? "", source_title: o.sourceTitle ?? "",
+      description: o.description ?? "",
       design_id: o.designId ?? "", npub: store.npub(), dpop_token: store.proof(),
     }) as Promise<{ success: boolean; assets?: number; error?: string }>,
   fetch: (designId: string) =>
     callMcp("fetch_design", { design_id: designId, npub: store.npub(), dpop_token: store.proof() }) as
-      Promise<{ success: boolean; design?: Rec; error?: string }>,
+      Promise<{ success: boolean; design?: Rec; description?: string; error?: string }>,
   del: (designId: string) =>
     callMcp("delete_design", { design_id: designId, npub: store.npub(), dpop_token: store.proof() }) as
       Promise<{ success: boolean; deleted?: boolean; error?: string }>,
