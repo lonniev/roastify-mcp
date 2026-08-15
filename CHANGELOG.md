@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Commit/Fetch/Delete now use one in-panel form instead of native alert/prompt
+  stacks.** Each shows its consequence labels, any fields, and Confirm/Cancel in a
+  single modal over the panel — Commit collects the message + version in one place,
+  Fetch and Delete confirm without leaving the panel. No more chained `confirm()`/
+  `prompt()` dialogs.
+- **The version must be semver `MAJOR.MINOR.PATCH` (e.g. `1.2.3`), no leading `v`.**
+  Enforced in the Commit form (Confirm blocks until valid, with an inline hint) and in
+  `stash_design` (rejected server-side), so a malformed version never reaches a git tag.
+
 ### Added
 
 - **Fetch offers a version picker — choose which committed version to apply.** New

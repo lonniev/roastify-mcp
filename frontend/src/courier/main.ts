@@ -182,6 +182,14 @@ function main(): void {
       .vrow .vtag{color:#4fbfc0}
       .vrow .vmsg{font-size:11px;color:#a9b2ac;word-break:break-word}
       .vrow .vsha{font-size:10px;color:#5f6b64;font-family:ui-monospace,Menlo,monospace}
+      .ovlbox .fline{font-size:12px;color:#c7cdc6;line-height:1.5}
+      .ovlbox label{margin-top:8px;margin-bottom:3px}
+      .ovlbox textarea{width:100%;min-height:52px;resize:vertical;background:#101312;color:#e8ece6;
+        border:1px solid #2c3432;border-radius:8px;padding:9px;font:inherit;font-size:14px;box-sizing:border-box}
+      .ovlbox .fhint{font-size:10px;color:#828d86;margin-top:3px}
+      .ovlbox .ferr{font-size:11px;color:#dc8a6f;margin-top:3px}
+      .frow{display:flex;gap:8px;margin-top:12px}
+      .frow button{flex:1}
       #work{flex-direction:column;gap:12px}
       pre{margin:0;background:#0d100f;border:1px solid #2c3432;border-radius:8px;padding:9px;
         font-size:11px;line-height:1.5;max-height:120px;overflow:auto;white-space:pre-wrap;word-break:break-word}
@@ -456,46 +464,121 @@ function main(): void {
     }
   };
 
-  // Keep asking until the answer is non-blank, or null if the user cancels.
-  const promptNonBlank = (message: string): string | null => {
-    for (;;) {
-      const v = prompt(message);
-      if (v === null) return null;
-      if (v.trim()) return v.trim();
-    }
-  };
+  const SEMVER = /^\d+\.\d+\.\d+$/;
+  const semverValidate = (v: string): string =>
+    SEMVER.test(v) ? "" : "Use MAJOR.MINOR.PATCH, e.g. 1.2.3 (no 'v').";
+
+  interface ModalField {
+    key: string; label: string; placeholder?: string; hint?: string;
+    multiline?: boolean; validate?: (v: string) => string;
+  }
+  // One in-panel modal: consequence lines, optional fields (validated), and
+  // Confirm/Cancel. Resolves to the field values (an empty object when there are no
+  // fields), or null on cancel. Replaces the confirm()/prompt() stack.
+  const modalForm = (opts: { title: string; lines: string[]; fields?: ModalField[]; confirmLabel?: string }):
+    Promise<Record<string, string> | null> =>
+    new Promise((resolve) => {
+      const ov = document.createElement("div");
+      ov.className = "ovl";
+      const box = document.createElement("div");
+      box.className = "ovlbox";
+      const h = document.createElement("div");
+      h.className = "ovlh";
+      h.textContent = opts.title;
+      box.appendChild(h);
+      for (const ln of opts.lines) {
+        const d = document.createElement("div");
+        d.className = "fline";
+        d.textContent = ln;
+        box.appendChild(d);
+      }
+      const inputs: Record<string, HTMLInputElement | HTMLTextAreaElement> = {};
+      const errs: Record<string, HTMLElement> = {};
+      const fields = opts.fields ?? [];
+      for (const f of fields) {
+        const lab = document.createElement("label");
+        lab.textContent = f.label;
+        box.appendChild(lab);
+        const inp = f.multiline ? document.createElement("textarea") : document.createElement("input");
+        if (f.placeholder) inp.placeholder = f.placeholder;
+        inp.setAttribute("autocapitalize", "off");
+        inp.spellcheck = false;
+        box.appendChild(inp);
+        inputs[f.key] = inp;
+        if (f.hint) {
+          const hn = document.createElement("div");
+          hn.className = "fhint";
+          hn.textContent = f.hint;
+          box.appendChild(hn);
+        }
+        const er = document.createElement("div");
+        er.className = "ferr";
+        box.appendChild(er);
+        errs[f.key] = er;
+      }
+      const row = document.createElement("div");
+      row.className = "frow";
+      const cancel = document.createElement("button");
+      cancel.className = "alt";
+      cancel.textContent = "Cancel";
+      const ok = document.createElement("button");
+      ok.textContent = opts.confirmLabel ?? "Confirm";
+      row.append(cancel, ok);
+      box.appendChild(row);
+      const done = (v: Record<string, string> | null) => { ov.remove(); resolve(v); };
+      cancel.onclick = () => done(null);
+      ok.onclick = () => {
+        const out: Record<string, string> = {};
+        let bad = false;
+        for (const f of fields) {
+          const val = inputs[f.key].value.trim();
+          const e = f.validate ? f.validate(val) : (val ? "" : "Required.");
+          errs[f.key].textContent = e;
+          if (e) bad = true;
+          else out[f.key] = val;
+        }
+        if (!bad) done(out);
+      };
+      ov.appendChild(box);
+      (sh.querySelector(".p") as HTMLElement).appendChild(ov);
+      (fields.length ? inputs[fields[0].key] : ok).focus();
+    });
 
   // Send this product's design UP to the library.
   $("stash").onclick = async () => {
     const p = PRODUCTS[+val("prod")];
     if (!p) return;
     if (!p.designJson) { log("✗ product has no saved design"); return; }
-    if (!confirm(
-      `Commit “${labelOf(p)}” to your GitHub library?\n\n` +
-      `This saves a NEW VERSION of:\n` +
-      `  • the product's current design\n` +
-      `  • its store-page description\n\n` +
-      `You'll enter a commit message and a version tag next. It commits to GitHub ` +
-      `only — nothing on Roastify or Shopify changes.`,
-    )) return;
-    const commitMessage = promptNonBlank(`Commit message for “${labelOf(p)}” (required):`);
-    if (commitMessage === null) { log("commit cancelled."); return; }
-    const versionTag = promptNonBlank(`Version tag for this commit (required, e.g. v1.0):`);
-    if (versionTag === null) { log("commit cancelled."); return; }
+    const form = await modalForm({
+      title: `Commit “${labelOf(p)}”`,
+      lines: [
+        "Saves a NEW VERSION to your GitHub library of:",
+        "  • the product's current design",
+        "  • its store-page description",
+        "Commits to GitHub only — nothing on Roastify or Shopify changes.",
+      ],
+      fields: [
+        { key: "message", label: "Commit message", placeholder: "what changed", multiline: true },
+        { key: "tag", label: "Version (semver)", placeholder: "1.2.3",
+          hint: "MAJOR.MINOR.PATCH, no 'v' — must be unique for this design", validate: semverValidate },
+      ],
+      confirmLabel: "⬆ Commit",
+    });
+    if (!form) { log("commit cancelled."); return; }
     ($("stash") as HTMLButtonElement).disabled = true;
     log(`reading “${labelOf(p)}”…`);
     try {
       const design = await readDesign(p.designJson);
       const full = await getProductById(idOf(p));
       const description = String(full?.description ?? "");
-      log(`committing ${JSON.stringify(design).length.toLocaleString()} bytes as “${versionTag}”…`);
+      log(`committing ${JSON.stringify(design).length.toLocaleString()} bytes as “${form.tag}”…`);
       const r = await api.stash(design, {
         label: labelOf(p),
         productId: idOf(p),
         sourceTitle: labelOf(p),
         description,
-        commitMessage,
-        versionTag,
+        commitMessage: form.message,
+        versionTag: form.tag,
       });
       if (!r.success) { log("✗ " + (r.error || "stash failed")); return; }
       log(`✓ stashed (${r.assets} image(s) deduped). Edit it in the Design Bench.`);
@@ -521,15 +604,19 @@ function main(): void {
       ? `version ${picked.tag || picked.short_sha} (${String(picked.date || "").slice(0, 10)})`
       : "the latest version";
     const hasDesc = !!(meta.description && meta.description.trim());
-    if (!confirm(
-      `Fetch “${name}” (${ver}) onto “${labelOf(target)}”?\n\n` +
-      `This OVERWRITES on the product:\n` +
-      `  • its design (open the Designer to see it render)\n` +
-      (hasDesc
-        ? `  • its store-page description — skipped if Shopify has locked it\n`
-        : `  (no saved description travels with this design)\n`) +
-      `\nThis changes the product on Roastify.`,
-    )) return;
+    const proceed = await modalForm({
+      title: `Fetch “${name}” onto “${labelOf(target)}”`,
+      lines: [
+        `Applying ${ver}. This OVERWRITES on the product:`,
+        "  • its design (open the Designer to see it render)",
+        hasDesc
+          ? "  • its store-page description — skipped if Shopify has locked it"
+          : "  (no saved description travels with this design)",
+        "This changes the product on Roastify.",
+      ],
+      confirmLabel: "⬇ Fetch",
+    });
+    if (!proceed) return;
     log(`applying “${name}” (${ver}) → “${labelOf(target)}”…`);
     try {
       const r = await api.fetch(meta.design_id, ref);
@@ -626,7 +713,15 @@ function main(): void {
   // library, so this is where a design's life ends. Confirm first.
   const deleteDesign = async (meta: StoredDesignMeta) => {
     const name = meta.label || meta.design_id.slice(0, 8);
-    if (!confirm(`Delete “${name}” from your design library?\n\nThis only removes the saved design — it does not touch any product.`)) return;
+    const ok = await modalForm({
+      title: `Delete “${name}”`,
+      lines: [
+        "Removes the saved design from your GitHub library.",
+        "It does not touch any product on Roastify or Shopify.",
+      ],
+      confirmLabel: "🗑 Delete",
+    });
+    if (!ok) return;
     log(`deleting “${name}”…`);
     try {
       const r = await api.del(meta.design_id);
