@@ -105,8 +105,10 @@ def non_text_elements(design: Any) -> list[dict[str, Any]]:
     An agent must know these exist so it neither reports a header's value as
     missing when the value is a graphic (e.g. a five-dot roast scale under a
     ROAST header), nor places text on top of background art. Each entry carries
-    id, type, name, and bounds (x/y/width/height). Roastify's migrated format
-    carries no visibility flag, so none is reported.
+    id, type, name, bounds (x/y/width/height), and its ``fill``/``stroke`` colors —
+    so a roast scale can be AUDITED (a filled dot has a dark ``fill``, an empty one
+    has none/light) and corrected with roastify_move_elements. Roastify's migrated
+    format carries no visibility flag, so none is reported.
     """
     out: list[dict[str, Any]] = []
 
@@ -118,6 +120,7 @@ def non_text_elements(design: Any) -> list[dict[str, Any]]:
                     "id": node["id"], "type": t, "name": node.get("name"),
                     "x": node.get("x"), "y": node.get("y"),
                     "width": node.get("width"), "height": node.get("height"),
+                    "fill": node.get("fill"), "stroke": node.get("stroke"),
                 })
             for v in node.values():
                 walk(v)
@@ -330,16 +333,19 @@ def edit_geometry(design: Any, edits: list[dict[str, Any]]) -> tuple[int, list[s
       - group shift:  {"ids": [id, ...], "dx": N, "dy": M} — add the delta to every
         named element's x/y, moving them together as one rigid object. This is the
         "lock the layers and shift them" the Designer can't do.
-      - absolute set: {"id": id, "x": ?, "y": ?, "width": ?, "height": ?, "fontSize": ?}
-        — set only the keys present (e.g. re-centre and resize a panel rectangle).
+      - absolute set: {"id": id, "x": ?, "y": ?, "width": ?, "height": ?, "fontSize": ?,
+        "fill": ?, "stroke": ?} — set only the keys present (e.g. re-centre a rectangle,
+        or fill/empty a roast-scale dot).
 
     Element kind decides what the size keys mean. On a RECTANGLE/line/image, ``width``
     and ``height`` are the frame and are written directly. On a TEXT layer, ``width``
     is the wrap frame and ``fontSize`` the type size — both settable — while ``height``
     is DERIVED (re-measured from the reflowed text); a ``height`` passed for a text
-    layer is ignored. Line endpoints (x1/y1/x2/y2, points) travel with any x/y move —
-    a bare x/y shift would leave the drawn line at its old spot. An unknown id is
-    collected in ``missing`` rather than raising. Only numeric fields are written.
+    layer is ignored. ``fill``/``stroke`` are colour strings, settable on any element
+    (e.g. a dark ``fill`` fills a roast dot, none/light empties it). Line endpoints
+    (x1/y1/x2/y2, points) travel with any x/y move — a bare x/y shift would leave the
+    drawn line at its old spot. An unknown id is collected in ``missing`` rather than
+    raising.
     """
     changed = 0
     missing: list[str] = []
@@ -377,6 +383,11 @@ def edit_geometry(design: Any, edits: list[dict[str, Any]]) -> tuple[int, list[s
                 for key in ("width", "height"):
                     if isinstance(edit.get(key), (int, float)):
                         el[key] = float(edit[key])
+            # fill/stroke are colours (strings) — settable on any element, e.g. to
+            # fill or empty a roast-scale dot (a dark fill = filled, none = empty).
+            for key in ("fill", "stroke"):
+                if isinstance(edit.get(key), str):
+                    el[key] = edit[key]
             changed += 1
     return changed, missing
 

@@ -868,8 +868,10 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
     Also returns `sheet` (the overall design extent), `panels` (the box's panel
     columns — front/back/left/right — recovered from the dieline, each with bounds),
     and a real `face` per layer/element (which panel its x-centre sits on, not the
-    constant "sheet"). And `elements` — the NON-text elements (images, shapes, rules)
-    read-only, each with id, type, name, and bounds.
+    constant "sheet"). And `elements` — the NON-text elements (images, shapes, rules),
+    each with id, type, name, bounds, and its `fill`/`stroke` colours — so a roast scale
+    can be audited (a filled dot has a dark `fill`, an empty one none) and set with
+    roastify_move_elements.
     Read those before judging the design: a header with no text value beneath it is
     NOT necessarily a defect — the value may be a graphic in `elements` (e.g. a
     five-dot roast scale under a ROAST header), and it tells you where NOT to place
@@ -1187,12 +1189,15 @@ async def move_elements(
               delta to every listed element's x/y (design units; +dy is down, +dx is
               right). Use this to move a whole block together.
             - absolute set: {"id": "a", "x": ?, "y": ?, "width": ?, "height": ?,
-              "fontSize": ?} — set only the keys you include. What the size keys mean
-              depends on the element: on a RECTANGLE/line/image, width and height are
-              the frame and set directly; on a TEXT layer, width is the wrap frame and
-              fontSize the type size (both settable) while height is DERIVED — it
-              re-measures from the reflowed text, and a height you pass for a text
-              layer is ignored. Use fontSize to match one label's size to a peer.
+              "fontSize": ?, "fill": ?, "stroke": ?} — set only the keys you include.
+              What the size keys mean depends on the element: on a RECTANGLE/line/image,
+              width and height are the frame and set directly; on a TEXT layer, width is
+              the wrap frame and fontSize the type size (both settable) while height is
+              DERIVED — it re-measures from the reflowed text, and a height you pass for a
+              text layer is ignored. Use fontSize to match one label's size to a peer.
+              fill/stroke are colour strings settable on any element — e.g. give a
+              roast-scale dot a dark fill to fill it, or clear the fill to empty it (read
+              each dot's current fill from roastify_get_design_text's `elements`).
             Get element ids and their current geometry from roastify_get_design_text.
         label: Rename the design (optional). Defaults to keeping its current label.
         commit_message: A specific description of WHAT changed and WHY — a real commit
@@ -1239,6 +1244,7 @@ async def move_elements(
                     "x": el.get("x"), "y": el.get("y"),
                     "width": el.get("width"), "height": el.get("height"),
                     "fontSize": el.get("fontSize"),
+                    "fill": el.get("fill"), "stroke": el.get("stroke"),
                 })
         meta = await store.put_design(
             design, design_id=design_id, label=label or found["label"],
