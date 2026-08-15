@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`list_design_versions` now includes description-only commits and their tags.** The
+  history query was path-scoped to `designs/<id>/design.json`, so a
+  `set_product_description` write (which updates `meta.json` while leaving `design.json`
+  byte-identical) never appeared — even though the version tag existed and collided on
+  reuse. The filter now walks the whole design folder, so description edits are
+  discoverable for rollback and next-semver calculation.
+
 ### Changed
 
 - **Every design commit an AI agent makes now requires a real commit message and the

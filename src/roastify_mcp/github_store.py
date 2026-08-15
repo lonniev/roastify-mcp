@@ -757,13 +757,19 @@ class GitHubStore:
 
     async def list_versions(self, design_id: str) -> list[dict[str, Any]]:
         """Every committed version of a design, newest first — the git history a
-        merchant picks from: sha, date, commit message, and version tag (if any)."""
+        merchant picks from: sha, date, commit message, and version tag (if any).
+
+        Scoped to the design's folder (not design.json alone): a description-only
+        write via set_product_description updates meta.json while leaving design.json
+        byte-identical, so a file-scoped filter would drop those commits and their
+        tags from the audit trail even though the tag exists in the repo.
+        """
         prefix = f"designs/{design_id}/"
         async with httpx.AsyncClient(timeout=60) as client:
             commits = await self._req(
                 client, "GET",
                 f"/repos/{self.owner}/{self.repo}/commits"
-                f"?sha={self.branch}&path={prefix}design.json&per_page=50",
+                f"?sha={self.branch}&path={prefix}&per_page=50",
                 allow_404=True) or []
             refs = await self._req(
                 client, "GET",

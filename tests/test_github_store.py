@@ -283,6 +283,36 @@ async def test_list_versions_merges_commits_and_tags():
 
 
 @respx.mock
+async def test_list_versions_scopes_history_to_design_folder():
+    """Description-only commits touch meta.json (and content.json) but leave design.json
+    byte-identical. Path-scoping the history query to design.json alone drops those
+    commits and their tags — so list_versions must walk the whole design folder.
+    """
+    store = gs.GitHubStore("tok", "owner", "repo", "main")
+    # A description write (newest) + an earlier layout write. Both must appear.
+    commits_route = respx.get(url__regex=r"/commits\?").mock(return_value=httpx.Response(200, json=[
+        {"sha": "descsha1", "html_url": "https://github.com/owner/repo/commit/descsha1",
+         "commit": {"message": "Refine store-page description", "committer": {"date": "2026-08-15T16:40:00Z"}}},
+        {"sha": "layout01", "html_url": "https://github.com/owner/repo/commit/layout01",
+         "commit": {"message": "initial layout", "committer": {"date": "2026-08-14T00:00:00Z"}}},
+    ]))
+    respx.get(url__regex=r"/git/matching-refs/tags/").mock(return_value=httpx.Response(200, json=[
+        {"ref": "refs/tags/imputation-blend-medium-roast/1.0.2", "object": {"sha": "descsha1"}},
+        {"ref": "refs/tags/imputation-blend-medium-roast/1.0.1", "object": {"sha": "layout01"}},
+    ]))
+    vs = await store.list_versions("imputation-blend-medium-roast")
+    # The path filter must be the design folder, not design.json alone — otherwise a
+    # set_product_description commit (meta.json only) is invisible to the listing.
+    assert commits_route.called
+    called_url = str(commits_route.calls.last.request.url)
+    assert "path=designs/imputation-blend-medium-roast/" in called_url
+    assert "design.json" not in called_url
+    assert [v["sha"] for v in vs] == ["descsha1", "layout01"]
+    assert vs[0]["tag"] == "1.0.2" and vs[0]["message"] == "Refine store-page description"
+    assert vs[1]["tag"] == "1.0.1"
+
+
+@respx.mock
 async def test_get_file_uses_the_given_ref():
     store = gs.GitHubStore("tok", "owner", "repo", "main")
     route = respx.get(url__regex=r"contents/designs/x/design\.json\?ref=abc123").mock(
