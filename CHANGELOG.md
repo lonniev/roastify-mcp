@@ -40,6 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Font repair now runs on every edit, not only on stash.** `stash_design` healed
+  Roastify's lossy migrated `fonts[]` (`repair=True`), but `update_design_text`,
+  `add_design_element`, and `move_elements` did not — so a design that entered the
+  library flawed (stashed before repair existed, or otherwise) kept rendering fallback
+  fonts in Edit Design through every subsequent CA revision. All three edit tools now
+  pass `repair=True`, so any save heals the font load list. Repair is idempotent for an
+  already-healed design and degrades to a plain-family URL if Google Fonts is
+  unreachable, so it never fails a save.
 - **`update_design_text` re-measures a text layer's `height` after an edit.** It set
   the new copy but left `height` (and the response) unchanged, so an agent verifying
   its own edit read stale bounds and concluded the change hadn't taken, and any later
