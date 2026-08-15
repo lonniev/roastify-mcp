@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Fetch now actually applies the description (correct product field names).** The
+  earlier fix guessed `title`/`retailPrice`; the real `getProductById` result names the
+  product `productName` and has **no** top-level price — the store price is
+  `max(variants[].retailPrice)` in cents. `applyDescription` now reads those, so the
+  read-modify-write to `updateStoreMetadata` succeeds instead of logging "couldn't read
+  the product's store fields." The skip message now also names which field was missing.
+
 ### Changed
 
 - **Commit/Fetch/Delete now use one in-panel form instead of native alert/prompt
