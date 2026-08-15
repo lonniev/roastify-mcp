@@ -20,6 +20,12 @@ import { api, store, type StoredDesignMeta } from "./mcp-lite";
 
 type Rec = Record<string, unknown>;
 
+// The GitHub octocat mark (fill=currentColor so it takes the button's ink),
+// reused on the Commit and Fetch buttons — both are GitHub operations.
+const OCTO =
+  '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">' +
+  '<path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>';
+
 if (location.host !== "merchant.roastify.app") {
   alert("Open this on merchant.roastify.app (signed in), then tap the bookmarklet there.");
 } else {
@@ -130,8 +136,13 @@ function main(): void {
       label{font-size:11px;color:#828d86;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em}
       input,select,button{font:inherit;box-sizing:border-box}
       input,select{width:100%;background:#101312;color:#e8ece6;border:1px solid #2c3432;border-radius:8px;padding:9px;font-size:14px}
+      select{appearance:none;-webkit-appearance:none;padding-right:28px;background-repeat:no-repeat;background-position:right 10px center;
+        background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" fill="none" stroke="%23828d86" stroke-width="1.5"/></svg>')}
       button{background:#0d7c7f;color:#0b1211;border:0;border-radius:8px;padding:10px;font-weight:700;cursor:pointer}
       button.wide{width:100%}
+      button.gh{display:inline-flex;align-items:center;gap:6px;line-height:1}
+      button svg{flex:0 0 auto}
+      #stash{align-self:flex-start;padding:8px 14px}
       button.alt{background:#3B4248;color:#e8ece6}
       button.danger{background:transparent;color:#dc8a6f;border:1px solid #5a3a32}
       button:disabled{opacity:.45;cursor:default}
@@ -146,8 +157,8 @@ function main(): void {
       .item{border:1px solid #2c3432;border-radius:8px;padding:9px 11px;background:#141817}
       .item .nm{font-size:13px;color:#e8ece6;font-weight:700;word-break:break-word}
       .item .mt{font-size:11px;color:#828d86;margin-top:3px}
-      .item .ax{display:flex;gap:8px;margin-top:9px}
-      .item .ax button{flex:1;padding:8px}
+      .item .ax{display:flex;gap:6px;margin-top:8px;justify-content:flex-end}
+      .item .ax button{padding:5px 9px;font-size:12px;display:inline-flex;align-items:center;gap:5px;line-height:1}
       .empty{color:#828d86;font-size:12px;padding:6px 0}
       .lib .load{color:#4fbfc0;font-size:12px;padding:6px 0}
       .lib .err{color:#dc8a6f;font-size:12px;padding:6px 0}
@@ -181,8 +192,8 @@ function main(): void {
         <div id="work" style="display:none">
           <div class="ok" id="who"></div>
           <div class="sec">
-            <div><label>Product</label><select id="prod"></select></div>
-            <button class="wide" id="stash" disabled>&#x2B06; Send this product's design to Library</button>
+            <div><label>Roastify Design</label><select id="prod"></select></div>
+            <button class="gh" id="stash" title="Commit this product's design up to your GitHub library" disabled>${OCTO}Commit</button>
           </div>
           <div class="sec">
             <div class="libhead"><label>Library <span id="libn"></span></label>
@@ -338,12 +349,15 @@ function main(): void {
       const ax = document.createElement("div");
       ax.className = "ax";
       const applyBtn = document.createElement("button");
-      applyBtn.textContent = "⬇ Apply";
+      applyBtn.className = "gh";
+      applyBtn.innerHTML = OCTO + "Fetch";
+      applyBtn.title = "Fetch this design from GitHub onto the selected product";
       applyBtn.disabled = !PRODUCTS.length;
       applyBtn.onclick = () => applyDesign(d);
       const delBtn = document.createElement("button");
       delBtn.className = "danger";
-      delBtn.textContent = "🗑 Delete";
+      delBtn.textContent = "🗑";
+      delBtn.title = "Delete this design's folder from GitHub";
       delBtn.onclick = () => deleteDesign(d);
       ax.append(applyBtn, delBtn);
       item.append(nm, mt, idl, ax);
