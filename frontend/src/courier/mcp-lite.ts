@@ -134,10 +134,12 @@ export const api = {
     callMcp("list_designs", { npub: store.npub(), dpop_token: store.proof() }) as
       Promise<{ success: boolean; designs?: StoredDesignMeta[]; error?: string }>,
   stash: (design: Rec,
-          o: { label?: string; productId?: string; sourceTitle?: string; description?: string; designId?: string }) =>
+          o: { label?: string; productId?: string; sourceTitle?: string; description?: string;
+               commitMessage?: string; versionTag?: string; designId?: string }) =>
     callMcp("stash_design", {
       design, label: o.label ?? "", product_id: o.productId ?? "", source_title: o.sourceTitle ?? "",
       description: o.description ?? "",
+      commit_message: o.commitMessage ?? "", version_tag: o.versionTag ?? "",
       design_id: o.designId ?? "", npub: store.npub(), dpop_token: store.proof(),
     }) as Promise<{ success: boolean; assets?: number; error?: string }>,
   fetch: (designId: string) =>

@@ -647,7 +647,8 @@ class GitHubStore:
 
     async def put_design(self, design: dict[str, Any], *, design_id: str = "", label: str = "",
                          product_id: str = "", source_title: str = "",
-                         description: str = "", repair: bool = False) -> dict[str, Any]:
+                         description: str = "", commit_message: str = "", version_tag: str = "",
+                         repair: bool = False) -> dict[str, Any]:
         # The store is configuration management: a design's identity is the slug of
         # its label, so re-stashing or editing the same design commits a new version
         # of the SAME folder rather than spawning a `<slug>-<hash>` sibling. Two
@@ -668,15 +669,28 @@ class GitHubStore:
             f"designs/{did}/content.json": json.dumps(text_layers(skeleton), indent=1).encode(),
             f"designs/{did}/meta.json": json.dumps(meta, indent=1).encode(),
         }
+        tag = f"{did}/{version_tag}" if version_tag else ""
         async with httpx.AsyncClient(timeout=60) as client:
+            # Fail BEFORE committing if the version tag is taken — a version tag is a
+            # unique milestone, and we don't want an orphan commit when it collides.
+            if tag:
+                existing = await self._req(
+                    client, "GET", f"/repos/{self.owner}/{self.repo}/git/ref/tags/{tag}",
+                    allow_404=True)
+                if existing is not None:
+                    raise GitHubError(f"version tag '{version_tag}' already exists for this design", 422)
             # Only upload an asset the repo does not already hold (git would de-dup
             # the blob anyway, but this saves re-sending megabytes every save).
             for name, raw in assets.items():
                 if await self._get_file(client, f"assets/{name}") is None:
                     writes[f"assets/{name}"] = raw
-            await self._commit(client, f"design: save {label or did}", writes, [])
+            commit_sha = await self._commit(client, commit_message or f"design: save {label or did}", writes, [])
+            if tag:
+                await self._req(client, "POST", f"/repos/{self.owner}/{self.repo}/git/refs",
+                                {"ref": f"refs/tags/{tag}", "sha": commit_sha})
         return {"design_id": did, "label": label, "product_id": product_id,
                 "source_title": source_title, "description": description, "assets": len(assets),
+                "commit_sha": commit_sha, "version_tag": version_tag,
                 "fonts_repaired": [f["family"] for f in repaired] if repaired is not None else None}
 
     async def get_skeleton(self, design_id: str) -> dict[str, Any] | None:

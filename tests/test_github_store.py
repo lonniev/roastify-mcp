@@ -346,6 +346,19 @@ class FakeGitHubStore(gs.GitHubStore):
         self.files: dict[str, bytes] = {"README.md": b"# designs"}
         self.commits = 0
         self.blob_writes = 0
+        self.tags: dict[str, str] = {}   # tag ref (without refs/tags/) -> sha
+
+    async def _req(self, client: Any, method: str, path: str,  # type: ignore[override]
+                   json_body: Any = None, allow_404: bool = False) -> Any:
+        # Offline double for the tag endpoints put_design touches.
+        if "/git/ref/tags/" in path:
+            tag = path.split("/git/ref/tags/", 1)[1]
+            return {"ref": f"refs/tags/{tag}"} if tag in self.tags else None
+        if path.endswith("/git/refs") and method == "POST":
+            ref = (json_body or {}).get("ref", "")
+            self.tags[ref.replace("refs/tags/", "")] = (json_body or {}).get("sha", "")
+            return {"ref": ref}
+        raise AssertionError(f"unexpected _req in fake: {method} {path}")
 
     async def _get_file(self, client: Any, path: str) -> bytes | None:  # type: ignore[override]
         return self.files.get(path)
@@ -465,6 +478,16 @@ async def test_set_new_description_overwrites_in_place():
                             label=found["label"], description="new bright & floral copy")
     assert m2["design_id"] == m["design_id"]
     assert (await r.get_design(m["design_id"]))["description"] == "new bright & floral copy"
+
+
+async def test_commit_message_and_version_tag():
+    r = FakeGitHubStore()
+    m = await r.put_design(DESIGN, label="Eth", commit_message="initial cut", version_tag="v1.0")
+    assert m["version_tag"] == "v1.0"
+    assert f"{m['design_id']}/v1.0" in r.tags        # tag ref namespaced by design id
+    # Reusing the same version tag for the same design is refused (before committing).
+    with pytest.raises(gs.GitHubError):
+        await r.put_design(DESIGN, design_id=m["design_id"], label="Eth", version_tag="v1.0")
 
 
 async def test_get_skeleton_never_inlines_the_image():

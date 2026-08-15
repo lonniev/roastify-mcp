@@ -697,6 +697,8 @@ async def stash_design(
     product_id: str = "",
     source_title: str = "",
     description: str = "",
+    commit_message: str = "",
+    version_tag: str = "",
     design_id: str = "",
     npub: _NPUB = "",
     dpop_token: str = "",
@@ -718,18 +720,26 @@ async def stash_design(
         source_title: The product's title at stash time, for your reference.
         description: The product's store-page description at stash time, versioned
             with the design so Fetch can re-apply it to a target product.
+        commit_message: The git commit message for this version. Required, non-blank.
+        version_tag: A unique version tag for this commit (git tag, namespaced per
+            design). Required, non-blank; reusing a tag for the same design is refused.
         design_id: Optional explicit folder id. Omit and the id is the slug of the
             label, so re-stashing the same design commits a new version in place
             instead of creating a duplicate.
     """
     if not isinstance(design, dict) or not design:
         return {"success": False, "error": "design must be a non-empty JSON object"}
+    if not commit_message.strip():
+        return {"success": False, "error": "commit_message is required and cannot be blank"}
+    if not version_tag.strip():
+        return {"success": False, "error": "version_tag is required and cannot be blank"}
 
     async def op(store: github_store.GitHubStore) -> dict[str, Any]:
         meta = await store.put_design(
             design, design_id=design_id, label=label,
             product_id=product_id, source_title=source_title,
-            description=description, repair=True,
+            description=description, commit_message=commit_message.strip(),
+            version_tag=version_tag.strip(), repair=True,
         )
         return {"success": True, **meta}
 
