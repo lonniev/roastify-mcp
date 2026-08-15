@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Commit now takes a required commit message and version tag.** The courier prompts
+  for both (neither may be blank) before a Commit; `stash_design` rejects a blank
+  message or tag, and the store writes the message as the git commit message and creates
+  a git **tag** (`<design_id>/<version_tag>`) on that commit. Reusing a tag for the same
+  design is refused *before* committing, so there's no orphan commit on a collision.
+
+### Fixed
+
+- **Fetch now applies the stored description (the field-name bug).** The read-modify-write
+  guarded on `name`/`retailPrice`, but Roastify's product carries its name as **`title`**
+  and its price as integer **`retailPrice`** (cents) — so the guard tripped and logged
+  "couldn't read the product's store fields," skipping the description. It now reads
+  `title` (falling back to `name`) and echoes `retailPrice` verbatim, so the description
+  applies while price and coffee attributes are preserved.
+
+### Added
+
 - **The product's store-page description travels with the design, and Fetch re-applies
   it.** Commit now captures the product's current Roastify `description` into the design's
   git package (`meta.json`), versioned alongside the artwork; Fetch reads it back and

@@ -421,21 +421,36 @@ function main(): void {
   const applyDescription = async (target: Rec, description: string): Promise<void> => {
     if (!description) return;
     const full = await getProductById(idOf(target));
-    if (!full || typeof full.name !== "string" || full.retailPrice == null) {
+    // Roastify's product carries its name as `title` and its price as an integer
+    // `retailPrice` in cents. updateStoreMetadata wants {name, retailPrice}, so echo
+    // the product's current values and change only the description.
+    const pname = typeof full?.title === "string" ? full.title
+      : typeof full?.name === "string" ? (full.name as string) : null;
+    const price = typeof full?.retailPrice === "number" ? full.retailPrice : null;
+    if (!full || pname === null || price === null) {
       log("  · description not applied (couldn't read the product's store fields).");
       return;
     }
     try {
       await mutate("products.updateStoreMetadata", {
         productId: idOf(target),
-        name: full.name,
+        name: pname,
         description,
-        retailPrice: full.retailPrice,
+        retailPrice: price,
         storeMetadata: (full.storeMetadata as Rec) ?? {},
       });
       log("  ✓ store description applied.");
     } catch {
       log("  · store description is locked (likely synced to Shopify) — left unchanged.");
+    }
+  };
+
+  // Keep asking until the answer is non-blank, or null if the user cancels.
+  const promptNonBlank = (message: string): string | null => {
+    for (;;) {
+      const v = prompt(message);
+      if (v === null) return null;
+      if (v.trim()) return v.trim();
     }
   };
 
@@ -449,20 +464,27 @@ function main(): void {
       `This saves a NEW VERSION of:\n` +
       `  • the product's current design\n` +
       `  • its store-page description\n\n` +
-      `It commits to GitHub only — nothing on Roastify or Shopify changes.`,
+      `You'll enter a commit message and a version tag next. It commits to GitHub ` +
+      `only — nothing on Roastify or Shopify changes.`,
     )) return;
+    const commitMessage = promptNonBlank(`Commit message for “${labelOf(p)}” (required):`);
+    if (commitMessage === null) { log("commit cancelled."); return; }
+    const versionTag = promptNonBlank(`Version tag for this commit (required, e.g. v1.0):`);
+    if (versionTag === null) { log("commit cancelled."); return; }
     ($("stash") as HTMLButtonElement).disabled = true;
     log(`reading “${labelOf(p)}”…`);
     try {
       const design = await readDesign(p.designJson);
       const full = await getProductById(idOf(p));
       const description = String(full?.description ?? "");
-      log(`stashing ${JSON.stringify(design).length.toLocaleString()} bytes…`);
+      log(`committing ${JSON.stringify(design).length.toLocaleString()} bytes as “${versionTag}”…`);
       const r = await api.stash(design, {
         label: labelOf(p),
         productId: idOf(p),
         sourceTitle: labelOf(p),
         description,
+        commitMessage,
+        versionTag,
       });
       if (!r.success) { log("✗ " + (r.error || "stash failed")); return; }
       log(`✓ stashed (${r.assets} image(s) deduped). Edit it in the Design Bench.`);
