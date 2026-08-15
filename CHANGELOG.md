@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Welcome landing page (`/welcome`).** A public front door for fellow Roastify merchants:
+  version your designs in git, edit a whole line of SKUs in one AI pass, and sync to Shopify.
+  Static page in the courier's die-line/kraft voice — the three moves, how the courier/agent/
+  library divide the work, and a four-step "connect once, pay per use" start (no price quoted).
+  A wired hero-image slot swaps in `courier-hero.png` when present.
+- **Design courier: pop the Library out into its own draggable window.** The fetchable-designs
+  list now has a pop-out toggle that detaches it into a separate, taller, draggable window, so
+  the catalog/Commit controls and the full design list are visible at once instead of scrolling
+  a strip inside the panel. Version-picker and confirm dialogs follow the list into whichever
+  window holds it.
 - **Read and set element `fill`/`stroke` — so an agent can audit and correct the roast
   scale.** `get_design_text` now returns each non-text element's `fill` and `stroke`
   colours (previously id/type/name/bounds only), so an agent can see which roast-scale

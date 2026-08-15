@@ -127,6 +127,13 @@ function main(): void {
         border:1px solid #2c3432;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.5);
         display:flex;flex-direction:column;max-height:calc(100vh - 32px)}
       .p.big{width:min(920px,calc(100vw - 24px))}
+      /* Detached Library window — same chrome as the main panel, opposite corner. */
+      .p2{position:fixed;top:16px;left:16px;z-index:2147483647;width:min(440px,calc(100vw - 24px));
+        font-family:ui-monospace,Menlo,monospace;color:#e8ece6;background:#171b1a;
+        border:1px solid #2c3432;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.5);
+        display:none;flex-direction:column;max-height:calc(100vh - 32px)}
+      .p2.on{display:flex}
+      .p2 .lib{max-height:74vh}
       .rz{position:absolute;right:2px;bottom:2px;width:16px;height:16px;cursor:nwse-resize;
         border-right:2px solid #4a544f;border-bottom:2px solid #4a544f;
         border-bottom-right-radius:11px;touch-action:none}
@@ -217,14 +224,22 @@ function main(): void {
             <div><label>Roastify Design</label><select id="prod"></select></div>
             <button class="gh" id="stash" title="Commit this product's design up to your GitHub library" disabled>${OCTO}Commit</button>
           </div>
-          <div class="sec">
+          <div class="sec" id="libsec">
             <div class="libhead"><label>Library <span id="libn"></span></label>
-              <span class="ic" id="r" title="Refresh">&#x21bb;</span></div>
+              <span style="display:flex;gap:2px">
+                <span class="ic" id="pop" title="Pop out / dock this list">&#x2197;</span>
+                <span class="ic" id="r" title="Refresh">&#x21bb;</span>
+              </span></div>
             <div class="lib" id="lib"></div>
           </div>
         </div>
         <pre id="log">Log in to begin.</pre>
       </div>
+    </div>
+    <div class="p2" id="p2">
+      <div class="h" id="hd2"><b>Fetchable designs</b>
+        <span class="ic" id="dock" title="Dock back into the panel">&#x2199;</span></div>
+      <div class="b" id="p2body"></div>
     </div>`;
   const $ = (id: string) => sh.getElementById(id) as HTMLElement;
   const val = (id: string) => (sh.getElementById(id) as HTMLInputElement | HTMLSelectElement).value;
@@ -243,10 +258,10 @@ function main(): void {
     p.classList.toggle("big");
   };
 
-  (() => {
+  // Drag a panel by its header. Shared by the main panel and the detached
+  // Library window so both move the same way.
+  const makeDraggable = (p: HTMLElement, h: HTMLElement) => {
     let dx = 0, dy = 0, on = false;
-    const p = sh.querySelector(".p") as HTMLElement;
-    const h = $("hd");
     h.onpointerdown = (e: PointerEvent) => {
       if ((e.target as HTMLElement)?.classList.contains("ic")) return;
       on = true; dx = e.clientX - p.offsetLeft; dy = e.clientY - p.offsetTop;
@@ -257,7 +272,25 @@ function main(): void {
       p.style.left = e.clientX - dx + "px"; p.style.top = e.clientY - dy + "px"; p.style.right = "auto";
     };
     h.onpointerup = () => { on = false; };
-  })();
+  };
+  makeDraggable(panelEl(), $("hd"));
+  makeDraggable($("p2"), $("hd2"));
+
+  // Pop the Library list out into its own draggable window (and back). Detached,
+  // it can sit beside the main panel — see the whole catalog and the fetchable
+  // designs at once — instead of scrolling a strip inside the panel.
+  const p2On = () => $("p2").classList.contains("on");
+  const popOut = () => { $("p2body").appendChild($("libsec")); $("p2").classList.add("on"); };
+  const dock = () => {
+    const mainBody = sh.querySelector(".p .b") as HTMLElement;
+    mainBody.insertBefore($("libsec"), $("log"));   // back above the log, where it lived
+    $("p2").classList.remove("on");
+  };
+  $("pop").onclick = () => (p2On() ? dock() : popOut());
+  $("dock").onclick = dock;
+  // Overlays (version picker, confirm dialogs) must appear over whichever window
+  // currently holds the Library, or they'd pop up on an empty main panel.
+  const libHost = (): HTMLElement => (p2On() ? $("p2") : (sh.querySelector(".p") as HTMLElement));
 
   // Resizable via a bottom-right grip; the chosen size persists across reloads.
   (() => {
@@ -533,7 +566,7 @@ function main(): void {
   // One in-panel modal: consequence lines, optional fields (validated), and
   // Confirm/Cancel. Resolves to the field values (an empty object when there are no
   // fields), or null on cancel. Replaces the confirm()/prompt() stack.
-  const modalForm = (opts: { title: string; lines: string[]; fields?: ModalField[]; confirmLabel?: string }):
+  const modalForm = (opts: { title: string; lines: string[]; fields?: ModalField[]; confirmLabel?: string; host?: HTMLElement }):
     Promise<Record<string, string> | null> =>
     new Promise((resolve) => {
       const ov = document.createElement("div");
@@ -598,7 +631,7 @@ function main(): void {
         if (!bad) done(out);
       };
       ov.appendChild(box);
-      (sh.querySelector(".p") as HTMLElement).appendChild(ov);
+      (opts.host ?? (sh.querySelector(".p") as HTMLElement)).appendChild(ov);
       (fields.length ? inputs[fields[0].key] : ok).focus();
     });
 
@@ -673,6 +706,7 @@ function main(): void {
         "This changes the product on Roastify.",
       ],
       confirmLabel: "⬇ Fetch",
+      host: libHost(),
     });
     if (!proceed) return;
     log(`applying “${name}” (${ver}) → “${labelOf(target)}”…`);
@@ -704,7 +738,7 @@ function main(): void {
 
   // Modal over the panel: pick which committed version to fetch. Resolves to the
   // chosen version, or null if cancelled.
-  const pickVersion = (versions: StoredVersion[]): Promise<StoredVersion | null> =>
+  const pickVersion = (versions: StoredVersion[], host: HTMLElement): Promise<StoredVersion | null> =>
     new Promise((resolve) => {
       const ov = document.createElement("div");
       ov.className = "ovl";
@@ -743,7 +777,7 @@ function main(): void {
       cancel.onclick = () => done(null);
       box.appendChild(cancel);
       ov.appendChild(box);
-      (sh.querySelector(".p") as HTMLElement).appendChild(ov);
+      host.appendChild(ov);
     });
 
   // Fetch entry point: offer a version picker when a design has more than one
@@ -756,7 +790,7 @@ function main(): void {
       const lv = await api.listVersions(meta.design_id);
       const versions = lv.versions || [];
       if (versions.length > 1) {
-        picked = await pickVersion(versions);
+        picked = await pickVersion(versions, libHost());
         if (!picked) { log("fetch cancelled."); return; }
         ref = picked.sha;
       }
@@ -778,6 +812,7 @@ function main(): void {
         "It does not touch any product on Roastify or Shopify.",
       ],
       confirmLabel: "🗑 Delete",
+      host: libHost(),
     });
     if (!ok) return;
     log(`deleting “${name}”…`);
