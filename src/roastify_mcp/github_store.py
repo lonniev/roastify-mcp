@@ -63,6 +63,17 @@ def _slug(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _element_z_index(design: Any, element_id: str) -> int | None:
+    """Index of ``element_id`` in the top-level ``elements`` array (paint order)."""
+    elements = design.get("elements") if isinstance(design, dict) else None
+    if not isinstance(elements, list):
+        return None
+    for i, el in enumerate(elements):
+        if isinstance(el, dict) and el.get("id") == element_id:
+            return i
+    return None
+
+
 def text_layers(design: Any) -> list[dict[str, Any]]:
     """List every text layer with its content, font, and box geometry.
 
@@ -72,7 +83,9 @@ def text_layers(design: Any) -> list[dict[str, Any]]:
     wrap FRAME — text wraps within it and it does not change as copy changes —
     while ``height`` is the grown extent, a function of line count: edit the text
     and height re-measures, width holds. ``chars`` is the current length, the anchor
-    to write near.
+    to write near. ``align`` is the horizontal text alignment; ``z`` is the
+    element's index in the top-level ``elements`` array (paint order — lower draws
+    first / behind).
     """
     out: list[dict[str, Any]] = []
 
@@ -84,10 +97,12 @@ def text_layers(design: Any) -> list[dict[str, Any]]:
                     "id": node["id"], "text": text, "chars": len(text),
                     "fontFamily": node.get("fontFamily"), "fontWeight": node.get("fontWeight"),
                     "fontSize": node.get("fontSize"),
+                    "align": node.get("align"),
                     "x": node.get("x"), "y": node.get("y"),
                     "width": node.get("width"), "height": node.get("height"),
                     "rotation": node.get("rotation"),
                     "face": node.get("faceId") or node.get("face"),
+                    "z": _element_z_index(design, node["id"]),
                 })
             for v in node.values():
                 walk(v)
@@ -105,9 +120,10 @@ def non_text_elements(design: Any) -> list[dict[str, Any]]:
     An agent must know these exist so it neither reports a header's value as
     missing when the value is a graphic (e.g. a five-dot roast scale under a
     ROAST header), nor places text on top of background art. Each entry carries
-    id, type, name, bounds (x/y/width/height), and its ``fill``/``stroke`` colors —
-    so a roast scale can be AUDITED (a filled dot has a dark ``fill``, an empty one
-    has none/light) and corrected with roastify_move_elements. Roastify's migrated
+    id, type, name, bounds (x/y/width/height), its ``fill``/``stroke`` colors, and
+    ``z`` (index in the top-level ``elements`` array — paint order) — so a roast
+    scale can be AUDITED (a filled dot has a dark ``fill``, an empty one has
+    none/light) and corrected with roastify_move_elements. Roastify's migrated
     format carries no visibility flag, so none is reported.
     """
     out: list[dict[str, Any]] = []
@@ -121,6 +137,7 @@ def non_text_elements(design: Any) -> list[dict[str, Any]]:
                     "x": node.get("x"), "y": node.get("y"),
                     "width": node.get("width"), "height": node.get("height"),
                     "fill": node.get("fill"), "stroke": node.get("stroke"),
+                    "z": _element_z_index(design, node["id"]),
                 })
             for v in node.values():
                 walk(v)
@@ -130,6 +147,24 @@ def non_text_elements(design: Any) -> list[dict[str, Any]]:
 
     walk(design)
     return out
+
+
+def available_fonts(design: Any) -> list[str]:
+    """Font families loaded on the design plus any family a text layer already uses.
+
+    Agents pick from this list when setting ``fontFamily`` via move_elements —
+    a family already present (in ``fonts[]`` or on a layer) is known-safe; new
+    Google Fonts names also work because put_design repairs ``fonts[]`` from
+    actual layer usage.
+    """
+    names: set[str] = set()
+    fonts = design.get("fonts") if isinstance(design, dict) else None
+    if isinstance(fonts, list):
+        for f in fonts:
+            if isinstance(f, dict) and f.get("family"):
+                names.add(str(f["family"]))
+    names.update(used_fonts(design))
+    return sorted(names)
 
 
 def sheet_size(design: Any) -> dict[str, Any]:
@@ -252,6 +287,95 @@ def build_text_element(design: Any, *, text: str, style_from: str,
     return el, ""
 
 
+def _image_srcs(design: Any) -> set[str]:
+    """Every image ``src`` already present in the design (data: URIs and asset:// markers)."""
+    found: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "image" and isinstance(node.get("src"), str) and node["src"]:
+                found.add(node["src"])
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(design)
+    return found
+
+
+def build_image_element(
+    design: Any, *,
+    x: float, y: float, width: float, height: float, new_id: str,
+    src_from: str = "", src: str = "",
+) -> tuple[dict[str, Any] | None, str]:
+    """Build a new image element whose ``src`` already exists in the design.
+
+    No new asset upload: pass ``src_from`` (an existing image element id) or an
+    explicit ``src`` that is already used by some image in this design (a data:
+    URI or ``asset://`` marker). Returns (element, "") or (None, error).
+    """
+    resolved = ""
+    if src_from:
+        donor = find_element(design, src_from)
+        if donor is None:
+            return None, f"src_from element '{src_from}' not found"
+        if donor.get("type") != "image":
+            return None, f"src_from element '{src_from}' is a {donor.get('type')}, not image"
+        resolved = donor.get("src") or ""
+        if not resolved:
+            return None, f"src_from element '{src_from}' has no src"
+    elif src:
+        if src not in _image_srcs(design):
+            return None, (
+                "src is not present in this design — only reuse a URL/asset already "
+                "on an image element (or pass src_from=an existing image id)"
+            )
+        resolved = src
+    else:
+        return None, "src_from or src is required"
+    el = {
+        "type": "image", "id": new_id, "src": resolved,
+        "x": round(x), "y": round(y),
+        "width": round(width), "height": round(height),
+        "faceId": "sheet",
+    }
+    return el, ""
+
+
+def reorder_element(design: Any, element_id: str, z: int | str) -> bool:
+    """Move ``element_id`` in the top-level ``elements`` array (paint order).
+
+    ``z`` is an absolute 0-based index, or ``"front"`` / ``"back"`` (last / first).
+    Returns True if the element was found and moved (or already at the target).
+    Mutates ``design`` in place. Only the top-level ``elements`` list is reordered —
+    nested trees are left alone (Roastify designs keep content there).
+    """
+    if not isinstance(design, dict):
+        return False
+    elements = design.get("elements")
+    if not isinstance(elements, list):
+        return False
+    idx = next((i for i, el in enumerate(elements)
+                if isinstance(el, dict) and el.get("id") == element_id), None)
+    if idx is None:
+        return False
+    if z == "front":
+        target = len(elements) - 1
+    elif z == "back":
+        target = 0
+    elif isinstance(z, (int, float)) and not isinstance(z, bool):
+        target = max(0, min(int(z), len(elements) - 1))
+    else:
+        return False
+    if idx == target:
+        return True
+    el = elements.pop(idx)
+    elements.insert(target, el)
+    return True
+
+
 def first_collision(el: dict[str, Any], design: Any) -> str | None:
     """The id of the first content element ``el`` overlaps (AABB), or None.
 
@@ -334,18 +458,21 @@ def edit_geometry(design: Any, edits: list[dict[str, Any]]) -> tuple[int, list[s
         named element's x/y, moving them together as one rigid object. This is the
         "lock the layers and shift them" the Designer can't do.
       - absolute set: {"id": id, "x": ?, "y": ?, "width": ?, "height": ?, "fontSize": ?,
-        "fill": ?, "stroke": ?} — set only the keys present (e.g. re-centre a rectangle,
-        or fill/empty a roast-scale dot).
+        "fill": ?, "stroke": ?, "align": ?, "fontFamily": ?, "z": ?} — set only the keys
+        present (e.g. re-centre a rectangle, fill/empty a roast-scale dot, or retarget
+        a repurposed text layer's alignment and face).
 
     Element kind decides what the size keys mean. On a RECTANGLE/line/image, ``width``
     and ``height`` are the frame and are written directly. On a TEXT layer, ``width``
     is the wrap frame and ``fontSize`` the type size — both settable — while ``height``
     is DERIVED (re-measured from the reflowed text); a ``height`` passed for a text
-    layer is ignored. ``fill``/``stroke`` are colour strings, settable on any element
-    (e.g. a dark ``fill`` fills a roast dot, none/light empties it). Line endpoints
-    (x1/y1/x2/y2, points) travel with any x/y move — a bare x/y shift would leave the
-    drawn line at its old spot. An unknown id is collected in ``missing`` rather than
-    raising.
+    layer is ignored. ``align`` (``left``/``center``/``right``/``justify``) and
+    ``fontFamily`` apply only to text layers. ``fill``/``stroke`` are colour strings,
+    settable on any element (e.g. a dark ``fill`` fills a roast dot, none/light empties
+    it). ``z`` reorders the element in the top-level ``elements`` array (paint order):
+    an int index, or ``"front"`` / ``"back"``. Line endpoints (x1/y1/x2/y2, points)
+    travel with any x/y move — a bare x/y shift would leave the drawn line at its old
+    spot. An unknown id is collected in ``missing`` rather than raising.
     """
     changed = 0
     missing: list[str] = []
@@ -379,6 +506,12 @@ def edit_geometry(design: Any, edits: list[dict[str, Any]]) -> tuple[int, list[s
                 new = (el.get("text", ""), el.get("fontSize") or 0, el.get("width") or 0)
                 if all(old[1:]) and all(new[1:]):
                     el["height"] = reflowed_height(el.get("height"), old, new)
+                # Typography on text only — align and fontFamily are the #62 gaps that
+                # forced merchants to catch right-aligned repurposed layers by eye.
+                if isinstance(edit.get("align"), str) and edit["align"].strip():
+                    el["align"] = edit["align"].strip()
+                if isinstance(edit.get("fontFamily"), str) and edit["fontFamily"].strip():
+                    el["fontFamily"] = edit["fontFamily"].strip()
             else:
                 for key in ("width", "height"):
                     if isinstance(edit.get(key), (int, float)):
@@ -388,6 +521,10 @@ def edit_geometry(design: Any, edits: list[dict[str, Any]]) -> tuple[int, list[s
             for key in ("fill", "stroke"):
                 if isinstance(edit.get(key), str):
                     el[key] = edit[key]
+            # z-order: absolute index, or "front"/"back". Applied after field writes so
+            # the element object is the same one still held in the list.
+            if "z" in edit:
+                reorder_element(design, str(edit["id"]), edit["z"])
             changed += 1
     return changed, missing
 

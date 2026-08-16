@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Design element flexibility (`align`, `fontFamily`, image create, z-order) — #62.**
+  Agents building branded tubes/boxes can now finish layout without a merchant screenshot
+  pass. `move_elements` accepts `align` and `fontFamily` on text (so a repurposed layer no
+  longer keeps a donor's right-align or Montserrat face), plus `z` (`front`/`back`/index)
+  to change paint order in the `elements` array. `get_design_text` exposes each layer's
+  `align` and every item's `z`, and returns `fonts` (loaded + used families) so callers
+  pick a known face. `add_design_element` gains `kind="image"` that copies a `src` already
+  present on the design (`src_from` or reuse `src`) — no new upload path — and places on
+  the sheet when `panels` is empty (Tubes), so element creation is reachable without a
+  panel name.
 - **Welcome landing page (`/welcome`).** A public front door for fellow Roastify merchants:
   version your designs in git, edit a whole line of SKUs in one AI pass, and sync to Shopify.
   Static page in the courier's die-line/kraft voice — the three moves, how the courier/agent/
