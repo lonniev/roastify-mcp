@@ -867,11 +867,13 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
     inside longer blurbs; change every id that should carry it.
 
     Also returns `sheet` (the overall design extent), `panels` (the box's panel
-    columns — front/back/left/right — recovered from the dieline, each with bounds),
+    columns — front/back/left/right — recovered from the dieline, each with bounds;
+    empty for single-face products like Tubes, where placement uses `sheet` instead),
     and a real `face` per layer/element (which panel its x-centre sits on, not the
-    constant "sheet"). And `elements` — the NON-text elements (images, shapes, rules),
-    each with id, type, name, bounds, `z`, and its `fill`/`stroke` colours — so a roast
-    scale can be audited (a filled dot has a dark `fill`, an empty one none) and set with
+    constant "sheet"; when panels is empty, layers keep their native faceId such as
+    "wrap"). And `elements` — the NON-text elements (images, shapes, rules), each with
+    id, type, name, bounds, `z`, and its `fill`/`stroke` colours — so a roast scale can
+    be audited (a filled dot has a dark `fill`, an empty one none) and set with
     roastify_move_elements. `fonts` lists the families loaded on the design plus any
     family a layer already uses — pick from it when setting `fontFamily` via move_elements.
     Read those before judging the design: a header with no text value beneath it is
@@ -1062,19 +1064,22 @@ async def add_design_element(
     design_id (git tracks the diff). The new element's id comes back, so you can
     immediately edit a text element by id with update_design_text, or move/reorder
     either kind with move_elements.
-    Placement is validated server-side and REFUSED, not warned: when `panels` are
-    known, the element must fall inside the named panel (with a default margin —
-    the dieline carries no real safe area) and must not overlap any existing
-    element (the collider's id is named). Typography is inherited for text, so a
-    new text element matches the template. Image creation reuses a src already
-    present in the design (no new asset upload) — pass `kind="image"` with
-    `src_from` (an existing image id) or `src` that already appears on an image.
+    Placement is validated server-side and REFUSED, not warned: the element must fall
+    inside the named panel (with a default margin — the dieline carries no real safe
+    area) — or, when the product has no panels (Tubes / continuous wrap), inside the
+    design sheet — and must not overlap any existing element (the collider's id is
+    named). Typography is inherited for text, so a new text element matches the
+    template. Image creation reuses a src already present in the design (no new asset
+    upload) — pass `kind="image"` with `src_from` (an existing image id) or `src` that
+    already appears on an image.
 
     Args:
         design_id: The design to add to, from roastify_list_designs.
         face: The panel to place it on — one of the `panels` from get_design_text
-            (e.g. "right"). Required when the design has panels; when `panels` is
-            empty (e.g. Tubes), omit it and use absolute position on the sheet.
+            (e.g. "right"). On multi-panel boxes the element must fall inside that
+            panel; face is required there. On single-face products (Tubes: `panels`
+            is empty) any face is accepted and containment uses the design's sheet
+            bounds instead.
         text: The element's text (\\n for line breaks). Required when kind="text".
         style_from: An existing TEXT layer id (from get_design_text) whose font,
             size, weight, colour, alignment, and leading the new text element inherits.
@@ -1124,24 +1129,16 @@ async def add_design_element(
             return {"success": False, "error": f"no design '{design_id}' in your library"}
         design = found["skeleton"]
         panels = await dieline.panels_for(design.get("productType", ""))
-        panel = panels.get(face.lower()) if face else None
-        if face and panels and not panel:
-            return {"success": False,
-                    "error": f"unknown panel '{face}'; panels are {sorted(panels) or 'unavailable'}"}
-        if panels and not face:
-            return {"success": False,
-                    "error": f"face is required; panels are {sorted(panels)}"}
-        if not panels:
-            # Tubes and other continuous wraps have no discrete panels — place on the sheet.
-            sheet = github_store.sheet_size(design)
-            sw = sheet.get("width") or 0
-            sh = sheet.get("height") or 0
-            if not (isinstance(sw, (int, float)) and isinstance(sh, (int, float)) and sw and sh):
-                return {"success": False, "error": "design has no panels and no sheet size to place against"}
-            panel = {"x": 0, "y": 0, "width": sw, "height": sh}
-            face_out = (face or "wrap").lower()
-        else:
-            face_out = face.lower()
+        # Multi-panel boxes: face must name a dieline column. Single-face wraps
+        # (Tubes — panels is empty): accept any face and contain against sheet.
+        panel, panel_err = dieline.resolve_placement_panel(
+            face, panels, github_store.sheet_size(design),
+        )
+        if panel is None:
+            return {"success": False, "error": panel_err}
+        # Label the placement target for later error messages; on a panelled box the
+        # helper has already guaranteed a valid face, on a wrap there is none ("wrap").
+        face_out = face.lower() if panels else (face or "wrap").lower()
 
         # Resolve position: absolute, or relative to an existing element.
         if "x" in position and "y" in position:

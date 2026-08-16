@@ -91,3 +91,42 @@ def face_of(x_centre: float, panels: dict[str, dict[str, int]]) -> str | None:
         if p and p["x"] <= x_centre < p["x"] + p["width"]:
             return name
     return None
+
+
+def sheet_panel(sheet: dict[str, Any] | None) -> dict[str, int] | None:
+    """Whole-sheet placement box from ``sheet`` bounds, or None if unusable.
+
+    Used when a product has no discrete panels (e.g. Tubes — a continuous wrap
+    whose dieline carries no SIDE_LABELS columns). The sheet is the coordinate
+    space every element already lives in.
+    """
+    s = sheet if isinstance(sheet, dict) else {}
+    sw, sh = s.get("width"), s.get("height")
+    if not (isinstance(sw, (int, float)) and isinstance(sh, (int, float)) and sw > 0 and sh > 0):
+        return None
+    return {"x": 0, "y": 0, "width": int(sw), "height": int(sh)}
+
+
+def resolve_placement_panel(
+    face: str,
+    panels: dict[str, dict[str, int]],
+    sheet: dict[str, Any] | None = None,
+) -> tuple[dict[str, int] | None, str]:
+    """Resolve the containment box for ``add_design_element``.
+
+    Multi-panel products (boxes): ``face`` must name a key in ``panels``.
+    Single-face products (Tubes and any type with no dieline columns): ``panels``
+    is empty — accept any face value and fall back to the design's sheet bounds.
+    Returns ``(panel, "")`` on success or ``(None, error)``.
+    """
+    if panels:
+        panel = panels.get(face.lower())
+        if not panel:
+            return None, f"unknown panel '{face}'; panels are {sorted(panels)}"
+        return panel, ""
+    panel = sheet_panel(sheet)
+    if panel is None:
+        return None, (
+            f"unknown panel '{face}'; panels are unavailable and design has no sheet bounds"
+        )
+    return panel, ""
