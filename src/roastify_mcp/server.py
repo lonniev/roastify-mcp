@@ -223,7 +223,7 @@ _DOMAIN_TOOLS = [
     # Small on the wire (no images), so an agent can drive product copy in chat.
     ToolIdentity(
         tool_id=GET_DESIGN_TEXT_UUID, capability="get_design_text", category="read",
-        intent="List the editable text layers of a stored design",
+        intent="List editable text layers, non-text elements, fonts, and z-order of a stored design",
     ),
     ToolIdentity(
         tool_id=UPDATE_DESIGN_TEXT_UUID, capability="update_design_text", category="write",
@@ -231,11 +231,11 @@ _DOMAIN_TOOLS = [
     ),
     ToolIdentity(
         tool_id=ADD_DESIGN_ELEMENT_UUID, capability="add_design_element", category="write",
-        intent="Add a new text element to a stored design, saved as a new design",
+        intent="Add a new text or image element to a stored design, saved as a new design",
     ),
     ToolIdentity(
         tool_id=MOVE_ELEMENTS_UUID, capability="move_elements", category="write",
-        intent="Shift a group of elements together and/or resize elements, saved as a new design",
+        intent="Shift, resize, restyle (align/fontFamily), or reorder elements, saved as a new design",
     ),
     ToolIdentity(
         tool_id=SET_PRODUCT_DESCRIPTION_UUID, capability="set_product_description", category="write",
@@ -858,20 +858,22 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
                           dpop_token: str = "") -> dict[str, Any]:
     """List the editable text layers of a stored design — the fields you can change.
 
-    Returns each text layer's id, current text, `chars` (its length), font, and box
-    geometry (`fontSize`, `width`, `height`) — but NOT the design's images, so it
-    stays small enough to reason over in a conversation. Each layer's current text
-    is its own label: infer its role (product name, tagline, story, recipe, tasting
-    notes, …) from the words it holds. The same name often appears in several layers
-    and inside longer blurbs; change every id that should carry it.
+    Returns each text layer's id, current text, `chars` (its length), font, `align`,
+    box geometry (`fontSize`, `width`, `height`), and `z` (paint-order index in the
+    top-level `elements` array) — but NOT the design's images, so it stays small
+    enough to reason over in a conversation. Each layer's current text is its own
+    label: infer its role (product name, tagline, story, recipe, tasting notes, …)
+    from the words it holds. The same name often appears in several layers and
+    inside longer blurbs; change every id that should carry it.
 
     Also returns `sheet` (the overall design extent), `panels` (the box's panel
     columns — front/back/left/right — recovered from the dieline, each with bounds),
     and a real `face` per layer/element (which panel its x-centre sits on, not the
     constant "sheet"). And `elements` — the NON-text elements (images, shapes, rules),
-    each with id, type, name, bounds, and its `fill`/`stroke` colours — so a roast scale
-    can be audited (a filled dot has a dark `fill`, an empty one none) and set with
-    roastify_move_elements.
+    each with id, type, name, bounds, `z`, and its `fill`/`stroke` colours — so a roast
+    scale can be audited (a filled dot has a dark `fill`, an empty one none) and set with
+    roastify_move_elements. `fonts` lists the families loaded on the design plus any
+    family a layer already uses — pick from it when setting `fontFamily` via move_elements.
     Read those before judging the design: a header with no text value beneath it is
     NOT necessarily a defect — the value may be a graphic in `elements` (e.g. a
     five-dot roast scale under a ROAST header), and it tells you where NOT to place
@@ -881,7 +883,8 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
     Geometry: each layer's `x`/`y` is its top-left corner in design units (the sheet
     origin is its top-left). `width`/`height` are MEASURED text bounds, not fixed
     frames — text does not clip, it grows, so a revision that holds the line count
-    and longest-line length keeps the footprint.
+    and longest-line length keeps the footprint. `z` is paint order (lower draws
+    first / behind); change it with roastify_move_elements `{"id", "z": "front"|"back"|N}`.
 
     Two things to respect:
     - A stash label states INTENT, not content: a design labeled for one coffee may
@@ -890,8 +893,8 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
       when you edit the text. Keep each replacement within roughly ±10% of the
       layer's `chars`; longer copy grows the box downward and can overrun its
       neighbour, which the merchant then fixes by hand. `fontSize`/`width` gauge how
-      tight a layer is; to change a label's `fontSize` (or its wrap frame), use
-      roastify_move_elements.
+      tight a layer is; to change a label's `fontSize`, wrap frame, `align`, or
+      `fontFamily`, use roastify_move_elements.
 
     Also returns `description` — the product's store-page prose (outside the design,
     syncs to Shopify), versioned with the design. Refine it and write it back with
@@ -932,6 +935,7 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
             "description": found.get("description", ""),
             "sheet": github_store.sheet_size(skeleton),
             "panels": panels,
+            "fonts": github_store.available_fonts(skeleton),
             "count": len(layers),
             "layers": layers,
             "elements": elements,
@@ -1036,11 +1040,15 @@ _PANEL_MARGIN = 60
 @runtime.paid_tool(ADD_DESIGN_ELEMENT_UUID)
 async def add_design_element(
     design_id: str,
-    face: str,
-    text: str,
-    style_from: str,
-    position: dict[str, Any],
+    face: str = "",
+    text: str = "",
+    style_from: str = "",
+    position: dict[str, Any] | None = None,
     width: int = 0,
+    height: int = 0,
+    kind: str = "text",
+    src_from: str = "",
+    src: str = "",
     label: str = "",
     commit_message: str = "",
     version_tag: str = "",
@@ -1048,29 +1056,43 @@ async def add_design_element(
     npub: _NPUB = "",
     dpop_token: str = "",
 ) -> dict[str, Any]:
-    """Add a new TEXT element to a design and commit a new version of it.
+    """Add a new element (text or image) to a design and commit a new version of it.
 
     The store is configuration management: the element is committed back to the SAME
     design_id (git tracks the diff). The new element's id comes back, so you can
-    immediately edit its text by id with update_design_text.
-    Placement is validated server-side and REFUSED, not warned: the element must
-    fall inside the named panel (with a default margin — the dieline carries no real
-    safe area) and must not overlap any existing element (the collider's id is
-    named). Typography is inherited, so a new element matches the template.
+    immediately edit a text element by id with update_design_text, or move/reorder
+    either kind with move_elements.
+    Placement is validated server-side and REFUSED, not warned: when `panels` are
+    known, the element must fall inside the named panel (with a default margin —
+    the dieline carries no real safe area) and must not overlap any existing
+    element (the collider's id is named). Typography is inherited for text, so a
+    new text element matches the template. Image creation reuses a src already
+    present in the design (no new asset upload) — pass `kind="image"` with
+    `src_from` (an existing image id) or `src` that already appears on an image.
 
     Args:
         design_id: The design to add to, from roastify_list_designs.
         face: The panel to place it on — one of the `panels` from get_design_text
-            (e.g. "right"). The element's centre must land in that panel.
-        text: The element's text (\\n for line breaks).
+            (e.g. "right"). Required when the design has panels; when `panels` is
+            empty (e.g. Tubes), omit it and use absolute position on the sheet.
+        text: The element's text (\\n for line breaks). Required when kind="text".
         style_from: An existing TEXT layer id (from get_design_text) whose font,
-            size, weight, colour, alignment, and leading the new element inherits.
+            size, weight, colour, alignment, and leading the new text element inherits.
+            Required when kind="text".
         position: Where to place it. Either absolute {"x": N, "y": M} (top-left in
             design units), or relative to an existing element:
             {"below"|"above"|"rightOf"|"leftOf": "layer_id", "gap": G}. Relative is
             best when there's a sibling to anchor to; an empty panel needs absolute.
-        width: The text box (wrap) width in design units. Defaults to the panel
-            width minus margins.
+        width: The text box (wrap) width, or the image frame width, in design units.
+            Defaults to the panel width minus margins for text; required for images
+            when not defaulting from the donor.
+        height: Image frame height in design units (kind="image" only). Defaults to
+            the donor image's height when src_from is set.
+        kind: "text" (default) or "image".
+        src_from: Existing IMAGE element id whose src to copy (kind="image").
+        src: An image src already present in this design (kind="image"); alternative
+            to src_from. New uploads are refused — only reuse an asset already on
+            the design.
         label: Rename the design (optional). Defaults to keeping its current label.
         commit_message: A specific description of WHAT changed and WHY — a real commit
             message, not a placeholder like 'save this' or 'update'. Required.
@@ -1078,9 +1100,18 @@ async def add_design_element(
             roastify_list_design_versions and increment. Required; reusing one is refused.
         client_req_id: Your idempotency key.
     """
-    for name, val in (("design_id", design_id), ("face", face), ("text", text), ("style_from", style_from)):
-        if not val:
-            return {"success": False, "error": f"{name} is required"}
+    if not design_id:
+        return {"success": False, "error": "design_id is required"}
+    kind_n = (kind or "text").strip().lower()
+    if kind_n not in ("text", "image"):
+        return {"success": False, "error": "kind must be 'text' or 'image'"}
+    if kind_n == "text":
+        for name, val in (("text", text), ("style_from", style_from)):
+            if not val:
+                return {"success": False, "error": f"{name} is required"}
+    else:
+        if not src_from and not src:
+            return {"success": False, "error": "src_from or src is required for kind='image'"}
     if not isinstance(position, dict) or not position:
         return {"success": False, "error": "position must be {x,y} or a relative anchor"}
     bad = _check_commit(commit_message, version_tag)
@@ -1093,12 +1124,24 @@ async def add_design_element(
             return {"success": False, "error": f"no design '{design_id}' in your library"}
         design = found["skeleton"]
         panels = await dieline.panels_for(design.get("productType", ""))
-        panel = panels.get(face.lower())
-        if not panel:
+        panel = panels.get(face.lower()) if face else None
+        if face and panels and not panel:
             return {"success": False,
                     "error": f"unknown panel '{face}'; panels are {sorted(panels) or 'unavailable'}"}
-
-        box_w = int(width) if width else max(80, panel["width"] - 2 * _PANEL_MARGIN)
+        if panels and not face:
+            return {"success": False,
+                    "error": f"face is required; panels are {sorted(panels)}"}
+        if not panels:
+            # Tubes and other continuous wraps have no discrete panels — place on the sheet.
+            sheet = github_store.sheet_size(design)
+            sw = sheet.get("width") or 0
+            sh = sheet.get("height") or 0
+            if not (isinstance(sw, (int, float)) and isinstance(sh, (int, float)) and sw and sh):
+                return {"success": False, "error": "design has no panels and no sheet size to place against"}
+            panel = {"x": 0, "y": 0, "width": sw, "height": sh}
+            face_out = (face or "wrap").lower()
+        else:
+            face_out = face.lower()
 
         # Resolve position: absolute, or relative to an existing element.
         if "x" in position and "y" in position:
@@ -1121,20 +1164,39 @@ async def add_design_element(
             elif rel == "leftOf":
                 px = rx - gap
 
-        el, err = github_store.build_text_element(
-            design, text=text, style_from=style_from, x=px, y=py, width=box_w,
-            new_id=f"add-{uuid.uuid4().hex[:8]}",
-        )
+        new_id = f"add-{uuid.uuid4().hex[:8]}"
+        if kind_n == "text":
+            box_w = int(width) if width else max(80, panel["width"] - 2 * _PANEL_MARGIN)
+            el, err = github_store.build_text_element(
+                design, text=text, style_from=style_from, x=px, y=py, width=box_w,
+                new_id=new_id,
+            )
+        else:
+            donor = github_store.find_element(design, src_from) if src_from else None
+            box_w = int(width) if width else (
+                int(donor["width"]) if donor and isinstance(donor.get("width"), (int, float)) else 0
+            )
+            box_h = int(height) if height else (
+                int(donor["height"]) if donor and isinstance(donor.get("height"), (int, float)) else 0
+            )
+            if box_w <= 0 or box_h <= 0:
+                return {"success": False,
+                        "error": "width and height are required for kind='image' (or pass src_from with sized donor)"}
+            el, err = github_store.build_image_element(
+                design, src_from=src_from, src=src, x=px, y=py,
+                width=box_w, height=box_h, new_id=new_id,
+            )
         if el is None:
             return {"success": False, "error": err}
 
-        # Refuse rather than warn: inside the panel (with margin), and no overlap.
+        # Refuse rather than warn: inside the panel/sheet (with margin), and no overlap.
         pl, pt = panel["x"] + _PANEL_MARGIN, panel["y"] + _PANEL_MARGIN
         pr, pb = panel["x"] + panel["width"] - _PANEL_MARGIN, panel["y"] + panel["height"] - _PANEL_MARGIN
         if not (pl <= el["x"] and el["x"] + el["width"] <= pr and pt <= el["y"] and el["y"] + el["height"] <= pb):
+            where = f"'{face_out}' panel" if panels else "sheet"
             return {"success": False,
                     "error": (f"element ({el['x']},{el['y']} {el['width']}x{el['height']}) falls outside the "
-                              f"'{face}' panel safe box (x {pl}–{pr}, y {pt}–{pb}). Move it or narrow the width.")}
+                              f"{where} safe box (x {pl}–{pr}, y {pt}–{pb}). Move it or narrow the width.")}
         hit = github_store.first_collision(el, design)
         if hit:
             return {"success": False, "error": f"element would overlap existing element '{hit}'. Reposition it."}
@@ -1151,7 +1213,8 @@ async def add_design_element(
             "success": True,
             "design_id": meta["design_id"],
             "element_id": el["id"],
-            "face": face.lower(),
+            "kind": kind_n,
+            "face": face_out,
             "placed": {"x": el["x"], "y": el["y"], "width": el["width"], "height": el["height"]},
         }
 
@@ -1189,15 +1252,20 @@ async def move_elements(
               delta to every listed element's x/y (design units; +dy is down, +dx is
               right). Use this to move a whole block together.
             - absolute set: {"id": "a", "x": ?, "y": ?, "width": ?, "height": ?,
-              "fontSize": ?, "fill": ?, "stroke": ?} — set only the keys you include.
+              "fontSize": ?, "fill": ?, "stroke": ?, "align": ?, "fontFamily": ?,
+              "z": ?} — set only the keys you include.
               What the size keys mean depends on the element: on a RECTANGLE/line/image,
               width and height are the frame and set directly; on a TEXT layer, width is
               the wrap frame and fontSize the type size (both settable) while height is
               DERIVED — it re-measures from the reflowed text, and a height you pass for a
               text layer is ignored. Use fontSize to match one label's size to a peer.
-              fill/stroke are colour strings settable on any element — e.g. give a
-              roast-scale dot a dark fill to fill it, or clear the fill to empty it (read
-              each dot's current fill from roastify_get_design_text's `elements`).
+              align (left|center|right|justify) and fontFamily apply to TEXT only — use
+              them when a repurposed layer still carries a donor's right-align or face
+              (read `fonts` from get_design_text for known families). fill/stroke are
+              colour strings settable on any element — e.g. give a roast-scale dot a dark
+              fill to fill it, or clear the fill to empty it (read each dot's current fill
+              from roastify_get_design_text's `elements`). z reorders paint order in the
+              elements array: an integer index, or "front" / "back".
             Get element ids and their current geometry from roastify_get_design_text.
         label: Rename the design (optional). Defaults to keeping its current label.
         commit_message: A specific description of WHAT changed and WHY — a real commit
@@ -1227,8 +1295,8 @@ async def move_elements(
                           else "edits changed nothing; each edit needs {ids,dx,dy} or {id,x/y/width/height}"),
             }
         # Echo the post-edit geometry of every element the edits touched (text
-        # layers report their re-measured height and any new fontSize) so the
-        # caller verifies against ground truth, not stale numbers.
+        # layers report their re-measured height and any new fontSize/align/family)
+        # so the caller verifies against ground truth, not stale numbers.
         touched: list[str] = []
         for e in edits:
             if e.get("ids"):
@@ -1239,13 +1307,18 @@ async def move_elements(
         for tid in dict.fromkeys(touched):
             el = github_store.find_element(design, tid)
             if el:
-                elements.append({
+                row = {
                     "id": tid, "type": el.get("type"),
                     "x": el.get("x"), "y": el.get("y"),
                     "width": el.get("width"), "height": el.get("height"),
                     "fontSize": el.get("fontSize"),
                     "fill": el.get("fill"), "stroke": el.get("stroke"),
-                })
+                    "z": github_store._element_z_index(design, tid),
+                }
+                if el.get("type") == "text":
+                    row["align"] = el.get("align")
+                    row["fontFamily"] = el.get("fontFamily")
+                elements.append(row)
         meta = await store.put_design(
             design, design_id=design_id, label=label or found["label"],
             product_id=found["product_id"], source_title=found["source_title"],

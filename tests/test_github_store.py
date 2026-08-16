@@ -603,3 +603,139 @@ def test_edit_geometry_sets_fill_to_fill_or_empty_a_roast_dot():
     assert d["elements"][0]["fill"] == "rgba(0,0,0,1)"
     # geometry untouched when only fill is set
     assert d["elements"][0]["x"] == 1 and d["elements"][0]["width"] == 28
+
+
+# ---------------------------------------------------------------------------
+# #62 — align, fontFamily, image creation, z-order
+# ---------------------------------------------------------------------------
+
+
+def test_text_layers_exposes_align_and_z():
+    """Agents need current align and stacking index to edit without a screenshot."""
+    d = {
+        "elements": [
+            {"type": "image", "id": "bg", "x": 0, "y": 0, "width": 10, "height": 10, "src": "x"},
+            {"type": "text", "id": "t1", "fontFamily": "Montserrat", "fontSize": 24,
+             "x": 1, "y": 2, "width": 100, "height": 20, "text": "hi", "align": "right"},
+        ],
+    }
+    layers = gs.text_layers(d)
+    assert layers[0]["align"] == "right"
+    assert layers[0]["z"] == 1  # second in the elements array (bg is 0)
+
+
+def test_non_text_elements_exposes_z():
+    d = {
+        "elements": [
+            {"type": "image", "id": "bg", "x": 0, "y": 0, "width": 10, "height": 10},
+            {"type": "shape", "id": "sc", "x": 1, "y": 2, "width": 3, "height": 4},
+        ],
+    }
+    by = {e["id"]: e for e in gs.non_text_elements(d)}
+    assert by["bg"]["z"] == 0 and by["sc"]["z"] == 1
+
+
+def test_edit_geometry_sets_align_and_font_family_on_text():
+    """#62.1/#62.2 — repurposed tube layers keep donor align/family unless move can set them."""
+    d = {
+        "elements": [{
+            "type": "text", "id": "t1", "fontFamily": "Montserrat", "fontSize": 24,
+            "x": 100, "y": 100, "width": 200, "height": 30, "text": "tagline",
+            "align": "right", "fill": "black",
+        }],
+    }
+    changed, missing = gs.edit_geometry(d, [{
+        "id": "t1", "align": "center", "fontFamily": "Fjalla One",
+    }])
+    assert (changed, missing) == (1, [])
+    t1 = d["elements"][0]
+    assert t1["align"] == "center"
+    assert t1["fontFamily"] == "Fjalla One"
+    # geometry untouched when only typography keys are set
+    assert t1["x"] == 100 and t1["width"] == 200
+
+
+def test_edit_geometry_rejects_align_font_family_on_non_text():
+    d = {"elements": [{"type": "shape", "id": "sc", "x": 1, "y": 2, "width": 3, "height": 4}]}
+    changed, missing = gs.edit_geometry(d, [{"id": "sc", "align": "center", "fontFamily": "X"}])
+    # still "changed" if we only no-op the text keys — but keys must not stick on a shape
+    sc = d["elements"][0]
+    assert "align" not in sc and "fontFamily" not in sc
+    assert changed == 1 and missing == []  # the edit targeted a known id
+
+
+def test_available_fonts_lists_design_and_used_families():
+    d = {
+        "fonts": [{"family": "Montserrat", "weights": [400]}],
+        "elements": [
+            {"type": "text", "id": "t1", "fontFamily": "Montserrat", "text": "a"},
+            {"type": "text", "id": "t2", "fontFamily": "Fjalla One", "text": "b"},
+        ],
+    }
+    fonts = gs.available_fonts(d)
+    assert "Montserrat" in fonts and "Fjalla One" in fonts
+
+
+def test_build_image_element_copies_src_from_existing_image():
+    """#62.3 — create an image element by referencing a src already in the design."""
+    d = json.loads(json.dumps(DESIGN))
+    el, err = gs.build_image_element(
+        d, src_from="ic", x=200, y=300, width=80, height=80, new_id="img-copy",
+    )
+    assert err == "" and el is not None
+    assert el["type"] == "image" and el["id"] == "img-copy"
+    assert el["src"] == _SMALL_SVG
+    assert (el["x"], el["y"], el["width"], el["height"]) == (200, 300, 80, 80)
+
+
+def test_build_image_element_accepts_explicit_src_already_in_design():
+    d = json.loads(json.dumps(DESIGN))
+    el, err = gs.build_image_element(
+        d, src=_SMALL_SVG, x=10, y=10, width=40, height=40, new_id="img-2",
+    )
+    assert err == "" and el is not None and el["src"] == _SMALL_SVG
+
+
+def test_build_image_element_rejects_unknown_src():
+    d = json.loads(json.dumps(DESIGN))
+    el, err = gs.build_image_element(
+        d, src="https://evil.example/new.png", x=0, y=0, width=10, height=10, new_id="x",
+    )
+    assert el is None and "not present" in err
+
+
+def test_build_image_element_rejects_non_image_src_from():
+    d = json.loads(json.dumps(DESIGN))
+    el, err = gs.build_image_element(
+        d, src_from="t1", x=0, y=0, width=10, height=10, new_id="x",
+    )
+    assert el is None and "not image" in err
+
+
+def test_reorder_element_front_back_and_index():
+    """#62.4 — stacking order is the elements array; agents must be able to change it."""
+    d = {
+        "elements": [
+            {"type": "image", "id": "bg", "x": 0, "y": 0, "width": 10, "height": 10},
+            {"type": "shape", "id": "plate", "x": 1, "y": 1, "width": 5, "height": 5},
+            {"type": "text", "id": "mark", "x": 2, "y": 2, "width": 3, "height": 3, "text": "GB"},
+        ],
+    }
+    assert gs.reorder_element(d, "plate", "back") is True
+    assert [e["id"] for e in d["elements"]] == ["plate", "bg", "mark"]
+    assert gs.reorder_element(d, "plate", "front") is True
+    assert [e["id"] for e in d["elements"]] == ["bg", "mark", "plate"]
+    assert gs.reorder_element(d, "mark", 0) is True
+    assert [e["id"] for e in d["elements"]] == ["mark", "bg", "plate"]
+
+
+def test_edit_geometry_z_reorders_elements():
+    d = {
+        "elements": [
+            {"type": "image", "id": "bg", "x": 0, "y": 0, "width": 10, "height": 10},
+            {"type": "text", "id": "t1", "x": 1, "y": 1, "width": 2, "height": 2, "text": "a"},
+        ],
+    }
+    changed, missing = gs.edit_geometry(d, [{"id": "t1", "z": "back"}])
+    assert (changed, missing) == (1, [])
+    assert [e["id"] for e in d["elements"]] == ["t1", "bg"]
