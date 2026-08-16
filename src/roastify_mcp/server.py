@@ -866,9 +866,11 @@ async def get_design_text(design_id: str, npub: _NPUB = "",
     and inside longer blurbs; change every id that should carry it.
 
     Also returns `sheet` (the overall design extent), `panels` (the box's panel
-    columns — front/back/left/right — recovered from the dieline, each with bounds),
+    columns — front/back/left/right — recovered from the dieline, each with bounds;
+    empty for single-face products like Tubes, where placement uses `sheet` instead),
     and a real `face` per layer/element (which panel its x-centre sits on, not the
-    constant "sheet"). And `elements` — the NON-text elements (images, shapes, rules),
+    constant "sheet"; when panels is empty, layers keep their native faceId such as
+    "wrap"). And `elements` — the NON-text elements (images, shapes, rules),
     each with id, type, name, bounds, and its `fill`/`stroke` colours — so a roast scale
     can be audited (a filled dot has a dark `fill`, an empty one none) and set with
     roastify_move_elements.
@@ -1055,13 +1057,17 @@ async def add_design_element(
     immediately edit its text by id with update_design_text.
     Placement is validated server-side and REFUSED, not warned: the element must
     fall inside the named panel (with a default margin — the dieline carries no real
-    safe area) and must not overlap any existing element (the collider's id is
-    named). Typography is inherited, so a new element matches the template.
+    safe area) — or, when the product has no panels (Tubes / continuous wrap),
+    inside the design sheet — and must not overlap any existing element (the
+    collider's id is named). Typography is inherited, so a new element matches
+    the template.
 
     Args:
         design_id: The design to add to, from roastify_list_designs.
         face: The panel to place it on — one of the `panels` from get_design_text
-            (e.g. "right"). The element's centre must land in that panel.
+            (e.g. "right"). On multi-panel boxes the element must fall inside that
+            panel. On single-face products (Tubes: `panels` is empty) any face is
+            accepted and containment uses the design's sheet bounds instead.
         text: The element's text (\\n for line breaks).
         style_from: An existing TEXT layer id (from get_design_text) whose font,
             size, weight, colour, alignment, and leading the new element inherits.
@@ -1093,10 +1099,13 @@ async def add_design_element(
             return {"success": False, "error": f"no design '{design_id}' in your library"}
         design = found["skeleton"]
         panels = await dieline.panels_for(design.get("productType", ""))
-        panel = panels.get(face.lower())
-        if not panel:
-            return {"success": False,
-                    "error": f"unknown panel '{face}'; panels are {sorted(panels) or 'unavailable'}"}
+        # Multi-panel boxes: face must name a dieline column. Single-face wraps
+        # (Tubes — panels is empty): accept any face and contain against sheet.
+        panel, panel_err = dieline.resolve_placement_panel(
+            face, panels, github_store.sheet_size(design),
+        )
+        if panel is None:
+            return {"success": False, "error": panel_err}
 
         box_w = int(width) if width else max(80, panel["width"] - 2 * _PANEL_MARGIN)
 
