@@ -394,6 +394,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependencies `pydantic-settings` and `python-dotenv`, which only `config.py` used, and
   the `modal` extra from the SDK pin.
 
+## 0.22.1 — 2026-08-17
+
+### Changed — track tollbooth-dpyc 0.86.0 (GitHub-free bootstrap)
+
+Picks up the GitHub-free operator bootstrap: relays and Authority resolution now come from the Oracle via MCP, so this operator no longer reads the dpyc-community registry on GitHub — closing the fleet-wide bootstrap SPOF.
+
 ## [0.1.0] - 2026-08-11
 
 Initial scaffold, forked from the `tollbooth-sample` exemplar via the
