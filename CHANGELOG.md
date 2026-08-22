@@ -394,6 +394,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependencies `pydantic-settings` and `python-dotenv`, which only `config.py` used, and
   the `modal` extra from the SDK pin.
 
+## [0.22.3] — 2026-08-22
+
+### Changed — track tollbooth-dpyc 0.87.2
+
+An object argument a client serialised as a JSON string is now parsed
+rather than refused as `dict_type`. Fixes `update_post` rejecting a
+large patch and `update_design_text` rejecting a multi-key edits
+object.
+
 ## [0.22.2] — 2026-08-22
 
 ### Changed — track tollbooth-dpyc 0.87.1
