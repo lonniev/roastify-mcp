@@ -7,6 +7,37 @@ on:
     branches: [main]
 
 jobs:
+  # The frontend, built the same way it is built on the way to production.
+  #
+  # Added fleet-wide after cypher-mcp PR #121 (tailwind 3 -> 4) went green on
+  # every check that repo ran, merged, broke `main`, and was only caught by the
+  # deploy — one step after it could still have been prevented. Five of the
+  # seven repos with a frontend had this gap. Green has to mean the site still
+  # builds.
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # The same command production runs. A break here is a break there.
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+        env:
+          VITE_MCP_URL: /mcp
+
   test:
     runs-on: ubuntu-latest
 
