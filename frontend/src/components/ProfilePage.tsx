@@ -4,7 +4,7 @@ import { useTheme, type Theme } from "../lib/theme";
 import { TIMEZONE_OPTIONS } from "../lib/timezone";
 import { useTimezone } from "../lib/useTimezone";
 import { getAccountStatement, type AccountStatementResult } from "../lib/mcp";
-import NostrProfilePanel from "./NostrProfilePanel";
+import { NostrProfilePanel, SessionKeyClaim } from "@tollbooth-dpyc/web/react";
 import RoastifyKeyPanel from "./RoastifyKeyPanel";
 import CouponsPanel from "./CouponsPanel";
 import BuildLicensePanel from "./BuildLicensePanel";
@@ -44,6 +44,9 @@ export default function ProfilePage() {
 
       {/* Nostr profile (kind-0) — avatar + contact, self-sovereign */}
       <NostrProfilePanel npub={npub} />
+      {/* Browser-held session nsec only — silent when NIP-07 / courier.
+          Keyed by npub so a revealed key never carries across a sign-in. */}
+      <SessionKeyClaim key={npub} npub={npub} />
 
       {/* X account — per-patron OAuth2 connection (required to post) */}
       <RoastifyKeyPanel />
