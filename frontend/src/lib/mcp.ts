@@ -17,9 +17,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
-import { clearSessionNsec, hasSessionNsec, sessionNsecNpub } from "./sessionNsec";
+import { clearSessionNsec, hasSessionNsec, sessionNsecNpub, signInlineProof } from "@tollbooth-dpyc/web";
 import { debugPush } from "./debugLog";
-import { signInlineProof } from "./inlineProof";
 
 const SLUG = "roastify";
 
@@ -643,51 +642,6 @@ export interface AccountStatementResult {
 
 export async function getAccountStatement(days = 30): Promise<AccountStatementResult> {
   return callTool<AccountStatementResult>("account_statement", { days });
-}
-
-// ─── Posts CRUD (paid) ───────────────────────────────────────────────────
-
-export interface Kind0 {
-  name?: string;
-  display_name?: string;
-  about?: string;
-  picture?: string;
-  banner?: string;
-  nip05?: string;
-  website?: string;
-  lud16?: string;
-}
-
-export interface GetNostrProfileResult {
-  success: boolean;
-  npub?: string;
-  profile?: Kind0;
-  error?: string;
-}
-
-/// Read an npub's public kind-0 profile via the operator MCP (free, no proof).
-export async function getNostrProfile(npub: string): Promise<GetNostrProfileResult> {
-  return callTool<GetNostrProfileResult>("get_nostr_profile", { npub });
-}
-
-export interface PublishNostrProfileResult {
-  success: boolean;
-  ok?: number;
-  total?: number;
-  errors?: string[];
-  error?: string;
-}
-
-/// Relay a CLIENT-signed kind-0 event through the operator MCP. The FE signs;
-/// the wheel verifies pubkey+signature and fans out to relays.
-export async function publishNostrProfile(
-  npub: string,
-  signedEvent: string,
-): Promise<PublishNostrProfileResult> {
-  return callTool<PublishNostrProfileResult>("publish_nostr_profile", {
-    npub,
-    signed_event: signedEvent,
-  });
 }
 
 // ─── Coupons (wheel 0.41.0+) ─────────────────────────────────────────────

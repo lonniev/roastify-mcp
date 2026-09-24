@@ -3,8 +3,8 @@ import { Link, NavLink } from "react-router-dom";
 import { Coffee, Layers, Wand2, Wallet } from "lucide-react";
 import type { ReactNode } from "react";
 import { useSession } from "../App";
-import Avatar from "./Avatar";
-import { avatarFor, AVATAR_EVENT } from "../lib/avatar";
+import { AVATAR_EVENT, avatarFor } from "@tollbooth-dpyc/web";
+import { Avatar } from "@tollbooth-dpyc/web/react";
 
 export default function Nav() {
   const { npub, logOut } = useSession();
