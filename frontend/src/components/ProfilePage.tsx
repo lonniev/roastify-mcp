@@ -83,12 +83,12 @@ export default function ProfilePage() {
         <ThemeToggle labels={themeLabels} classNames={themeLook} />
       </div>
 
-      {/* Display timezone — IANA zone for every clock on Posts/Performance/Scheduler/Wallet. */}
+      {/* Display timezone — IANA zone for the Wallet's dates and the debug log's stamps. */}
       <div className={`${card} p-5`}>
         <div className="text-sm font-medium mb-1">Display timezone</div>
         <p className="text-xs text-stone-500 dark:text-zinc-400 mb-3">
-          All times on Posts, Performance, Scheduler, and Wallet use this zone. Storage stays UTC;
-          only display and filter edges convert. Saved on this device.
+          Dates on your Wallet — top-ups and when credits expire — and the debug log's times use
+          this zone. Saved on this device.
         </p>
         <TimezonePicker
           label="Zone"
@@ -100,7 +100,7 @@ export default function ProfilePage() {
         <p className="mt-2 text-[11px] text-stone-400 dark:text-zinc-500">
           {tzPref === "auto"
             ? `Currently resolving to ${tzResolved}.`
-            : `Using ${tzResolved}. Historical posts keep the offset that applied when they were sent.`}
+            : `Using ${tzResolved}. Past dates keep the offset that applied at the time.`}
         </p>
       </div>
 
