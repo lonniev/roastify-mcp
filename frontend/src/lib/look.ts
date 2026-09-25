@@ -6,9 +6,21 @@ import type { CouponsPanelClassNames, WalletPageClassNames } from "@tollbooth-dp
 
 export const card = "rounded-xl border border-stone-200 dark:border-zinc-800 bg-white dark:bg-zinc-900";
 
-/** Every action the shared pieces draw is a chip. */
+/** Every action the shared pieces draw is a chip… */
 const chip =
   "inline-flex items-center gap-1.5 rounded-lg border border-stone-300 px-3 py-1.5 text-sm transition-colors hover:bg-stone-50 disabled:opacity-40 dark:border-zinc-700 dark:hover:bg-zinc-800";
+
+/**
+ * …but the one that moves things forward, which is the amber button it always
+ * was (Create invoice, at the end of its row; Redeem). Open checkout, a link,
+ * stays the amber text link it always was.
+ */
+const primary = [
+  "inline-flex items-center ml-auto px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap",
+  "bg-amber-600 text-white hover:bg-amber-500 disabled:opacity-40",
+  "[a&]:ml-0 [a&]:px-3 [a&]:py-1.5 [a&]:bg-transparent [a&]:hover:bg-transparent [a&]:hover:underline",
+  "[a&]:text-amber-600 dark:[a&]:text-amber-400",
+].join(" ");
 
 const input =
   "rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-zinc-950 border border-stone-300 dark:border-zinc-700 focus:outline-hidden focus:border-amber-400";
@@ -27,6 +39,7 @@ export const walletLook: WalletPageClassNames = {
   notice: "text-xs text-amber-600 dark:text-amber-400",
   error: errorBox,
   chip,
+  primary,
   chipActive: "border-amber-400 bg-amber-100 text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/15 dark:text-amber-400",
   chips: "flex flex-wrap items-center gap-2",
   input: `${input} w-32`,
@@ -43,7 +56,7 @@ export const couponsLook: CouponsPanelClassNames = {
   intro: "text-xs text-stone-500 dark:text-zinc-400 mb-4",
   form: "flex gap-2 mb-3",
   input: `${input} flex-1 py-2 uppercase`,
-  chip: "bg-amber-600 hover:bg-amber-500 text-white text-sm px-4 py-2 rounded-lg disabled:opacity-40 transition-colors whitespace-nowrap",
+  primary,
   message: "rounded-lg p-2.5 mb-3 text-xs border",
   ok: "bg-green-50 border-green-200 text-green-700 dark:bg-green-500/10 dark:border-green-500/30 dark:text-green-400",
   error: "bg-red-50 border-red-200 text-red-700 dark:bg-red-500/10 dark:border-red-500/30 dark:text-red-400",
