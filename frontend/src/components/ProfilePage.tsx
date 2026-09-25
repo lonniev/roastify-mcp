@@ -1,25 +1,43 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useSession } from "../App";
-import { useTheme, type Theme } from "../lib/theme";
 import { TIMEZONE_OPTIONS } from "../lib/timezone";
 import { useTimezone } from "../lib/useTimezone";
-import { getAccountStatement, type AccountStatementResult } from "@tollbooth-dpyc/web";
-import { NostrProfilePanel, SessionKeyClaim } from "@tollbooth-dpyc/web/react";
+import { getAccountStatement, type AccountStatementResult, type Theme } from "@tollbooth-dpyc/web";
+import { NostrProfilePanel, SessionKeyClaim, ThemeToggle } from "@tollbooth-dpyc/web/react";
 import RoastifyKeyPanel from "./RoastifyKeyPanel";
-import CouponsPanel from "./CouponsPanel";
+import Coupons from "./Coupons";
 import BuildLicensePanel from "./BuildLicensePanel";
+import { card } from "../lib/look";
 
-const card = "rounded-xl border border-stone-200 dark:border-zinc-800 bg-white dark:bg-zinc-900";
+const THEME_LABELS: Record<Theme, { label: string; hint: string }> = {
+  dark: { label: "Dark", hint: "Default" },
+  light: { label: "Light", hint: "" },
+  system: { label: "System", hint: "Match OS" },
+};
 
-const THEMES: { value: Theme; label: string; hint: string }[] = [
-  { value: "dark", label: "Dark", hint: "Default" },
-  { value: "light", label: "Light", hint: "" },
-  { value: "system", label: "System", hint: "Match OS" },
-];
+const themeLabels = Object.fromEntries(
+  (Object.keys(THEME_LABELS) as Theme[]).map((t) => [
+    t,
+    <>
+      <div className="flex items-center gap-2">
+        <ThemeSwatch theme={t} />
+        <span className="text-sm font-medium">{THEME_LABELS[t].label}</span>
+      </div>
+      {THEME_LABELS[t].hint && (
+        <span className="block text-xs text-stone-400 dark:text-zinc-500 mt-1">{THEME_LABELS[t].hint}</span>
+      )}
+    </>,
+  ]),
+) as Record<Theme, ReactNode>;
+
+const themeLook = {
+  root: "grid grid-cols-3 gap-2",
+  chip: "rounded-lg border px-3 py-3 text-left transition-colors border-stone-200 dark:border-zinc-800 hover:bg-stone-50 dark:hover:bg-zinc-800",
+  active: "border-amber-400! bg-amber-50! dark:border-amber-500/50! dark:bg-amber-500/10!",
+};
 
 export default function ProfilePage() {
   const { npub, status, logOut } = useSession();
-  const [theme, setTheme] = useTheme();
   const [tzPref, tzResolved, setTzPref] = useTimezone();
   const [stmt, setStmt] = useState<AccountStatementResult | null>(null);
   const [copied, setCopied] = useState(false);
@@ -62,27 +80,7 @@ export default function ProfilePage() {
         <p className="text-xs text-stone-500 dark:text-zinc-400 mb-3">
           Roastify defaults to dark. Your choice is saved on this device.
         </p>
-        <div className="grid grid-cols-3 gap-2">
-          {THEMES.map((t) => (
-            <button
-              key={t.value}
-              onClick={() => setTheme(t.value)}
-              className={`rounded-lg border px-3 py-3 text-left transition-colors ${
-                theme === t.value
-                  ? "border-amber-400 bg-amber-50 dark:border-amber-500/50 dark:bg-amber-500/10"
-                  : "border-stone-200 dark:border-zinc-800 hover:bg-stone-50 dark:hover:bg-zinc-800"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <ThemeSwatch theme={t.value} />
-                <span className="text-sm font-medium">{t.label}</span>
-              </div>
-              {t.hint && (
-                <span className="block text-xs text-stone-400 dark:text-zinc-500 mt-1">{t.hint}</span>
-              )}
-            </button>
-          ))}
-        </div>
+        <ThemeToggle labels={themeLabels} classNames={themeLook} />
       </div>
 
       {/* Display timezone — IANA zone for every clock on Posts/Performance/Scheduler/Wallet. */}
@@ -136,9 +134,9 @@ export default function ProfilePage() {
         <div className="text-sm font-medium mb-3">Last 30 days</div>
         {stmt ? (
           <div className="grid grid-cols-3 gap-3 text-center">
-            <Stat label="Balance" value={stmt.balance_api_sats} />
-            <Stat label="Deposited" value={stmt.total_deposited_api_sats} />
-            <Stat label="Consumed" value={stmt.total_consumed_api_sats} />
+            <Stat label="Balance" value={stmt.account_summary?.balance_api_sats} />
+            <Stat label="Deposited" value={stmt.account_summary?.total_deposited_api_sats} />
+            <Stat label="Consumed" value={stmt.account_summary?.total_consumed_api_sats} />
           </div>
         ) : (
           <p className="text-xs text-stone-400 dark:text-zinc-500">No statement available.</p>
@@ -146,7 +144,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Coupons */}
-      <CouponsPanel />
+      <Coupons />
 
       {/* Build & license */}
       <BuildLicensePanel status={status} />
