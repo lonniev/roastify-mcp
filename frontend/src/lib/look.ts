@@ -2,7 +2,13 @@
 // The package owns the mechanics (calls, states, words); these class maps
 // are the Bench's stone/zinc/amber, light and dark.
 
-import type { CouponsPanelClassNames, WalletPageClassNames } from "@tollbooth-dpyc/web/react";
+import type {
+  BuildInfoPanelClassNames,
+  CouponsPanelClassNames,
+  TimezonePickerClassNames,
+  UsageSummaryClassNames,
+  WalletPageClassNames,
+} from "@tollbooth-dpyc/web/react";
 
 export const card = "rounded-xl border border-stone-200 dark:border-zinc-800 bg-white dark:bg-zinc-900";
 
@@ -64,4 +70,43 @@ export const couponsLook: CouponsPanelClassNames = {
   empty: "text-xs text-stone-400 dark:text-zinc-500 leading-relaxed",
   list: "divide-y divide-stone-100 dark:divide-zinc-800",
   row: "flex items-center gap-3 py-2.5",
+};
+
+export const timezonePickerLook: TimezonePickerClassNames = {
+  label: "block text-xs text-stone-500 dark:text-zinc-400 mb-1.5",
+  select:
+    "w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm focus:outline-hidden focus:border-amber-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200",
+};
+
+const muted = "text-xs text-stone-400 dark:text-zinc-500";
+
+export const usageLook: UsageSummaryClassNames = {
+  root: `${card} p-5`,
+  header: "mb-3 flex items-center gap-2",
+  heading: "text-sm font-medium",
+  chip: "ml-auto text-xs text-stone-500 hover:text-amber-600 dark:text-zinc-400 dark:hover:text-amber-400 disabled:opacity-40 transition-colors",
+  figures: "grid grid-cols-3 gap-3 text-center",
+  value: "text-lg font-semibold tabular-nums",
+  label: muted,
+  subheading: "mt-4 mb-1 text-xs uppercase tracking-wider text-stone-400 dark:text-zinc-500",
+  list: "divide-y divide-stone-100 dark:divide-zinc-800",
+  row: "flex items-baseline gap-3 py-1.5 text-xs",
+  tool: "flex-1 min-w-0 truncate font-mono text-stone-700 dark:text-zinc-300",
+  calls: "text-stone-400 dark:text-zinc-500 tabular-nums",
+  sats: "w-24 text-right text-stone-700 dark:text-zinc-300 tabular-nums",
+  loading: muted,
+  error: muted,
+  empty: muted,
+};
+
+// The row carries the value colour so a link's amber never fights it.
+export const buildInfoLook: BuildInfoPanelClassNames = {
+  root: `${card} p-5`,
+  heading: "text-sm font-medium mb-1",
+  intro: "text-xs text-stone-500 dark:text-zinc-400 mb-4 leading-relaxed",
+  section: "text-xs uppercase tracking-wider text-stone-400 dark:text-zinc-500 mt-4 mb-1",
+  row: "flex gap-3 py-1.5 border-b border-stone-100 dark:border-zinc-800 text-xs text-stone-700 dark:text-zinc-300",
+  label: "w-28 shrink-0 text-stone-400 dark:text-zinc-500",
+  value: "flex-1 min-w-0 font-mono break-all",
+  link: "text-amber-600 dark:text-amber-400 hover:underline",
 };
