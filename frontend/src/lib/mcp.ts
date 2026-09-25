@@ -2,107 +2,14 @@
  * Roastify's own tools, called through @tollbooth-dpyc/web.
  *
  * The client core is the package's: the one MCP connection, the npub/proof
- * envelope (a fresh kind-27235 inline proof bound to the runtime tool name
- * when this tab holds a session key, else the cached DM proof), the
- * proof-bounce signal, identity storage and the standard tools (service
- * status, npub proofs, balance, top-up, payment, statement, profile). What
- * stays here is Roastify's alone: the catalog, the merchant's products, the
- * design library, artwork, and the wrappers for coupon and patron-credential
- * tools the package does not type yet.
+ * envelope, the proof-bounce signal, identity storage and the standard tools
+ * (service status, proofs, balance, top-up, payment, statement, coupons,
+ * profile, patron credential fields). What stays here is Roastify's alone:
+ * the catalog, the merchant's products, the design library, artwork, and the
+ * courier conversation that carries the patron's Roastify key.
  */
 
-import {
-  callTool,
-  getStoredNpub,
-  getStoredProof,
-  type CheckBalanceResult,
-  type ServiceStatus,
-} from "@tollbooth-dpyc/web";
-
-// ─── Fields this operator reports beyond the package's types ─────────────
-
-/// service_status, with the Horizon build stamp the Build & License panel shows.
-export interface RoastifyServiceStatus extends ServiceStatus {
-  build_info?: {
-    fastmcp_cloud_url?: string;
-    fastmcp_cloud_git_commit_sha?: string;
-    fastmcp_cloud_git_repo?: string;
-  };
-}
-
-export interface CreditTranche {
-  id: string;
-  amount_sats: number;
-  remaining_sats: number;
-  expires_at: string | null;
-  created_at: string | null;
-}
-
-/// check_balance, with the tranche detail the Wallet lists.
-export interface BalanceDetail extends CheckBalanceResult {
-  active_tranches?: number;
-  tranches?: CreditTranche[];
-}
-
-export interface OnboardingField {
-  field: string;
-  category?: string;
-  status?: string;
-  lifecycle?: string;
-  how?: string;
-}
-
-// ─── Coupons (wheel 0.41.0+) ─────────────────────────────────────────────
-
-export interface PatronCoupon {
-  coupon_id: string;
-  name: string;
-  discount_percent: number;
-  valid_from: string;
-  valid_until: string;
-  uses_per_patron: number | null;
-  use_count: number;
-  uses_remaining: number | null;
-  total_uses: number | null;
-  total_remaining: number | null;
-  status: string; // active | window_closed | window_not_started | patron_limit | total_limit
-}
-
-export interface ListMyCouponsResult {
-  success: boolean;
-  count: number;
-  coupons: PatronCoupon[];
-  error?: string;
-}
-
-export interface RedeemCouponResult {
-  success: boolean;
-  coupon_id?: string;
-  name?: string;
-  discount_percent?: number;
-  valid_until?: string;
-  uses_remaining?: number | null;
-  uses_per_patron?: number | null;
-  error?: string;
-}
-
-export interface ForgetCouponResult {
-  success: boolean;
-  coupon_id?: string;
-  error?: string;
-}
-
-export async function listMyCoupons(): Promise<ListMyCouponsResult> {
-  return callTool<ListMyCouponsResult>("list_my_coupons", {});
-}
-
-export async function redeemCoupon(code: string): Promise<RedeemCouponResult> {
-  return callTool<RedeemCouponResult>("redeem_coupon", { code });
-}
-
-export async function forgetCoupon(couponId: string): Promise<ForgetCouponResult> {
-  return callTool<ForgetCouponResult>("forget_coupon", { coupon_id: couponId });
-}
+import { callTool, getStoredNpub, getStoredProof } from "@tollbooth-dpyc/web";
 
 // ─── Roastify catalog ────────────────────────────────────────────────────
 
@@ -296,6 +203,14 @@ export async function artworkStatus(jobId: string): Promise<ArtworkStatusResult>
 }
 
 // ─── Patron credentials (the Roastify key) ───────────────────────────────
+
+export interface OnboardingField {
+  field: string;
+  category?: string;
+  status?: string;
+  lifecycle?: string;
+  how?: string;
+}
 
 export interface PatronOnboardingResult {
   ready: boolean;
