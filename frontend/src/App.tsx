@@ -9,10 +9,10 @@ import {
   type ServiceStatus,
 } from "./lib/mcp";
 import { hydrateAvatarFromNostr } from "@tollbooth-dpyc/web";
+import { DebugPanel } from "@tollbooth-dpyc/web/react";
 import Nav from "./components/Nav";
 import Hero from "./components/Hero";
 import NpubGate from "./components/NpubGate";
-import DebugPanel from "./components/DebugPanel";
 import CatalogPage from "./components/CatalogPage";
 import DesignsPage from "./components/DesignsPage";
 import BenchPage from "./components/BenchPage";
