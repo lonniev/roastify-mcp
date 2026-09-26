@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Layers, Wand2, Package } from "lucide-react";
 import { listMyProducts, type MyProduct } from "../lib/mcp";
-import RefreshButton from "./RefreshButton";
+import { RefreshButton } from "@tollbooth-dpyc/web/react";
+import { refreshLook } from "../lib/look";
 
 const CACHE_KEY = "roastify:designs:v1";
 
@@ -46,7 +47,7 @@ export default function DesignsPage() {
       <header className="mb-5 flex items-center gap-3">
         <h1 className="text-xl font-semibold tracking-tight">Your designs</h1>
         <div className="ml-auto">
-          <RefreshButton onClick={load} busy={loading} size="sm" />
+          <RefreshButton onRefresh={load} busy={loading} classNames={refreshLook.header} />
         </div>
       </header>
 

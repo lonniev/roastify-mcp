@@ -3,8 +3,11 @@
 // are the Bench's stone/zinc/amber, light and dark.
 
 import type {
+  AccountPageClassNames,
   BuildInfoPanelClassNames,
   CouponsPanelClassNames,
+  RefreshButtonClassNames,
+  SiteNavClassNames,
   TimezonePickerClassNames,
   UsageSummaryClassNames,
   WalletPageClassNames,
@@ -109,4 +112,59 @@ export const buildInfoLook: BuildInfoPanelClassNames = {
   label: "w-28 shrink-0 text-stone-400 dark:text-zinc-500",
   value: "flex-1 min-w-0 font-mono break-all",
   link: "text-amber-600 dark:text-amber-400 hover:underline",
+};
+
+// The top bar. Each page is an icon and a word; on a phone the pages fold
+// behind a menu button at the far right, which opens a full-width sheet of
+// rows under the bar — icon and word, the current page in amber.
+export const navLook: SiteNavClassNames = {
+  // The 40 px tap targets set the bar's height, so it keeps the 52 px it had.
+  root: "relative border-b border-stone-200 dark:border-zinc-800 px-4 py-1.5 flex items-center gap-1.5",
+  nav: "max-sm:order-last",
+  list: "flex flex-wrap items-center gap-1.5",
+  item: "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-1.5 text-stone-500 hover:text-stone-900 hover:bg-stone-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800",
+  active:
+    "bg-amber-100 text-amber-800! hover:bg-amber-100! dark:bg-amber-500/15 dark:text-amber-400! dark:hover:bg-amber-500/15!",
+  icon: "inline-flex [&_svg]:h-4 [&_svg]:w-4",
+  end: "ml-auto flex items-center gap-3",
+  toggle:
+    "inline-flex items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 aria-expanded:bg-stone-100 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:aria-expanded:bg-zinc-800 transition-colors",
+  menu: "absolute inset-x-0 top-full z-40 divide-y divide-stone-100 border-b border-stone-200 bg-white shadow-lg dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900",
+  menuItem:
+    "gap-3 px-4 py-2.5 text-[15px] transition-colors text-stone-700 hover:bg-stone-50 dark:text-zinc-200 dark:hover:bg-zinc-800 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:text-stone-400 dark:[&_svg]:text-zinc-500",
+  menuItemActive:
+    "font-medium text-amber-700! bg-amber-50! dark:text-amber-400! dark:bg-amber-500/10! [&_svg]:text-amber-600! dark:[&_svg]:text-amber-400!",
+  account: "relative",
+  accountButton: "flex items-center justify-center rounded-full",
+  accountMenu:
+    "absolute right-0 top-full mt-1.5 w-56 rounded-xl border border-stone-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg overflow-hidden z-40",
+  accountHeader: "px-3 py-2 border-b border-stone-100 dark:border-zinc-800",
+  accountHeading: "text-xs text-stone-400 dark:text-zinc-500",
+  accountNpub: "text-xs font-mono truncate text-stone-600 dark:text-zinc-300",
+  accountLink:
+    "px-3 text-sm text-stone-600 dark:text-zinc-300 hover:bg-stone-50 dark:hover:bg-zinc-800 transition-colors",
+  signOut:
+    "w-full text-left px-3 text-sm text-stone-600 dark:text-zinc-300 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400 transition-colors",
+};
+
+// Profile: every panel in the same card; the time-zone and theme sections are
+// the package's, drawn in that card too.
+export const accountLook: AccountPageClassNames = {
+  root: "max-w-3xl mx-auto px-4 py-6 space-y-5",
+  heading: "text-lg font-semibold",
+  section: `${card} p-5`,
+  sectionHeading: "text-sm font-medium mb-1",
+  sectionIntro: "text-xs text-stone-500 dark:text-zinc-400 mb-3",
+  sectionNote: "mt-2 text-[11px] text-stone-400 dark:text-zinc-500",
+  actions: "flex justify-end",
+  signOut:
+    "text-sm px-4 py-2 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors",
+};
+
+// Refresh: a 48 px button in a toolbar, 40 px beside a page title.
+const refreshButton =
+  "inline-flex items-center justify-center rounded-lg text-stone-400 transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-500 dark:hover:bg-zinc-800";
+export const refreshLook: Record<"toolbar" | "header", RefreshButtonClassNames> = {
+  toolbar: { root: `${refreshButton} h-12 w-12`, spinning: "animate-spin" },
+  header: { root: `${refreshButton} h-10 w-10`, spinning: "animate-spin" },
 };

@@ -1,18 +1,13 @@
-import { useState, type ReactNode } from "react";
-import { useSession } from "../App";
+// Profile: the package's AccountPage in the Bench's look, with Roastify's own
+// panels in its slots — the Roastify key after the session key, and Roastify's
+// coupon rows in place of the package's.
+
+import type { ReactNode } from "react";
 import type { Theme } from "@tollbooth-dpyc/web";
-import {
-  BuildInfoPanel,
-  NostrProfilePanel,
-  SessionKeyClaim,
-  ThemeToggle,
-  TimezonePicker,
-  UsageSummary,
-  useTimezone,
-} from "@tollbooth-dpyc/web/react";
+import { AccountPage, useAppShell } from "@tollbooth-dpyc/web/react";
 import RoastifyKeyPanel from "./RoastifyKeyPanel";
 import Coupons from "./Coupons";
-import { buildInfoLook, card, timezonePickerLook, usageLook } from "../lib/look";
+import { accountLook, buildInfoLook, timezonePickerLook, usageLook } from "../lib/look";
 
 const THEME_LABELS: Record<Theme, { label: string; hint: string }> = {
   dark: { label: "Dark", hint: "Default" },
@@ -42,119 +37,53 @@ const themeLook = {
 };
 
 export default function ProfilePage() {
-  const { npub, status, logOut } = useSession();
-  const [tzPref, tzResolved] = useTimezone();
-  const [copied, setCopied] = useState(false);
-
-  function copyNpub() {
-    navigator.clipboard?.writeText(npub).then(
-      () => {
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1500);
-      },
-      () => {},
-    );
-  }
-
+  const { session, status } = useAppShell();
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
-      <h1 className="text-lg font-semibold">Profile</h1>
-
-      {/* Nostr profile (kind-0) — avatar + contact, self-sovereign */}
-      <NostrProfilePanel npub={npub} />
-      {/* Browser-held session nsec only — silent when NIP-07 / courier.
-          Keyed by npub so a revealed key never carries across a sign-in. */}
-      <SessionKeyClaim key={npub} npub={npub} />
-
-      {/* X account — per-patron OAuth2 connection (required to post) */}
-      <RoastifyKeyPanel />
-
-      {/* Identity & credential health — OAuth, proof expiry, credits.
-          Composed from existing tools; checked_at on every row. */}
-
-      {/* Operator-only upstream dependencies (gated like scheduler_pending). */}
-
-      {/* Theme selection */}
-      <div className={`${card} p-5`}>
-        <div className="text-sm font-medium mb-1">Appearance</div>
-        <p className="text-xs text-stone-500 dark:text-zinc-400 mb-3">
-          Roastify defaults to dark. Your choice is saved on this device.
-        </p>
-        <ThemeToggle labels={themeLabels} classNames={themeLook} />
-      </div>
-
-      {/* Display timezone — IANA zone for the Wallet's dates and the debug log's stamps. */}
-      <div className={`${card} p-5`}>
-        <div className="text-sm font-medium mb-1">Display timezone</div>
-        <p className="text-xs text-stone-500 dark:text-zinc-400 mb-3">
-          Dates on your Wallet — top-ups and when credits expire — and the debug log's times use
-          this zone. Saved on this device.
-        </p>
-        <TimezonePicker
-          label="Zone"
-          id="tz-select"
-          autoLabel={(zone) => `Auto (browser) — ${zone}`}
-          optionLabel={(o) => `${o.label} — ${o.value}`}
-          classNames={timezonePickerLook}
-        />
-        <p className="mt-2 text-[11px] text-stone-400 dark:text-zinc-500">
-          {tzPref === "auto"
-            ? `Currently resolving to ${tzResolved}.`
-            : `Using ${tzResolved}. Past dates keep the offset that applied at the time.`}
-        </p>
-      </div>
-
-      {/* Identity */}
-      <div className={`${card} p-5`}>
-        <div className="text-sm font-medium mb-2">Nostr identity</div>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 min-w-0 truncate text-xs font-mono text-stone-600 dark:text-zinc-300 bg-stone-50 dark:bg-zinc-950 rounded-sm px-2 py-1.5">
-            {npub}
-          </code>
-          <button
-            onClick={copyNpub}
-            className="text-xs px-2.5 py-1.5 rounded-lg border border-stone-300 dark:border-zinc-700 text-stone-500 dark:text-zinc-400 hover:bg-stone-100 dark:hover:bg-zinc-800 transition-colors"
-          >
-            {copied ? "Copied" : "Copy"}
-          </button>
-        </div>
-      </div>
-
-      {/* Usage */}
-      <UsageSummary classNames={usageLook} />
-
-      {/* Coupons */}
-      <Coupons />
-
-      {/* Build & license */}
-      <BuildInfoPanel
-        status={status}
-        frontend={{
+    <AccountPage
+      npub={session.npub}
+      onSignOut={session.signOut}
+      classNames={accountLook}
+      between={{ sessionKey: <RoastifyKeyPanel />, coupons: <Coupons /> }}
+      usage={{ classNames: usageLook }}
+      timezone={{
+        heading: "Display timezone",
+        intro:
+          "Dates on your Wallet — top-ups and when credits expire — and the debug log's times use this zone. Saved on this device.",
+        label: "Zone",
+        id: "tz-select",
+        autoLabel: (zone) => `Auto (browser) — ${zone}`,
+        optionLabel: (o) => `${o.label} — ${o.value}`,
+        classNames: timezonePickerLook,
+        note: (pref, zone) =>
+          pref === "auto"
+            ? `Currently resolving to ${zone}.`
+            : `Using ${zone}. Past dates keep the offset that applied at the time.`,
+      }}
+      theme={{
+        intro: "Roastify defaults to dark. Your choice is saved on this device.",
+        labels: themeLabels,
+        classNames: themeLook,
+      }}
+      coupons={false}
+      build={{
+        status,
+        frontend: {
           version: __APP_VERSION__,
           commit: __BUILD_COMMIT__,
           builtAt: __BUILD_TIME__,
           source: "https://github.com/lonniev/roastify-mcp",
-        }}
-        intro={
+        },
+        intro: (
           <>
             Roastify and Tollbooth-DPYC<sup>™</sup> ship as open source under the Apache License 2.0 —
             anyone can read the code, fork it, run their own operator. The <i>services</i> on top are
             private commerce: each operator sets their own tolls; patrons pre-fund a Lightning balance
             and pay per call. The protocol is shared; the businesses on it are not.
           </>
-        }
-        classNames={buildInfoLook}
-      />
-
-      <div className="flex justify-end">
-        <button
-          onClick={logOut}
-          className="text-sm px-4 py-2 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
-        >
-          Log out
-        </button>
-      </div>
-    </div>
+        ),
+        classNames: buildInfoLook,
+      }}
+    />
   );
 }
 
