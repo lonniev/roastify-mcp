@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Coffee, Package, Ruler, Search, Leaf } from "lucide-react";
 import { browseCatalog, type BrowseCatalogResult, type Blend, type CatalogProduct } from "../lib/mcp";
-import RefreshButton from "./RefreshButton";
+import { RefreshButton } from "@tollbooth-dpyc/web/react";
+import { refreshLook } from "../lib/look";
 
 const CACHE_KEY = "roastify:catalog:v1";
 
@@ -83,7 +84,7 @@ export default function CatalogPage() {
               className="w-40 rounded-lg border border-stone-200 bg-white py-1.5 pl-8 pr-2 text-sm outline-none focus:border-amber-400 dark:border-zinc-800 dark:bg-zinc-900 sm:w-56"
             />
           </label>
-          <RefreshButton onClick={load} busy={loading} />
+          <RefreshButton onRefresh={load} busy={loading} iconSize={24} classNames={refreshLook.toolbar} />
         </div>
       </header>
 

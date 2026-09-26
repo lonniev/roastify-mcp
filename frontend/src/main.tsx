@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { bootstrapTheme, configureTollbooth } from "@tollbooth-dpyc/web";
+import { configureTollbooth } from "@tollbooth-dpyc/web";
 import { ErrorBoundary } from "@tollbooth-dpyc/web/react";
 import App from "./App";
 import "./index.css";
@@ -12,9 +12,6 @@ configureTollbooth({
   appName: "Roastify",
   mcpUrl: import.meta.env.VITE_MCP_URL as string,
 });
-
-// Apply the saved theme (dark by default) before first paint — no flash.
-bootstrapTheme();
 
 // Last guard: a render-time throw shows a calm card, not a white screen.
 const crash = {
