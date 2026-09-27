@@ -9,12 +9,16 @@ import BenchPage from "./components/BenchPage";
 import Wallet from "./components/Wallet";
 import ProfilePage from "./components/ProfilePage";
 
+/** The site's own words above the sign-in card. */
+const WELCOME = "Your coffee line, and every word printed on it. Catalog, designs and artwork stay with your key.";
+
 // The session, the sign-in gate, the theme, the avatar and the debug log are
 // the package's AppShell; Roastify brings its routes, its hero and its footer.
 export default function App() {
   return (
     <AppShell
       theme="dark"
+      gateOptions={{ welcome: WELCOME }}
       classNames={{ root: "bg-stone-50 dark:bg-zinc-950 text-stone-900 dark:text-zinc-100 transition-colors" }}
       footer={({ status }) => <Footer status={status} />}
       signedOut={({ gate }) => (
