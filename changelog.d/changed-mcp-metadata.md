@@ -1,0 +1,1 @@
+- Every Roastify tool carries a title and its behaviour: catalog and library reads reach Roastify or your GitHub repo, library edits commit a new version, `delete_design` removes a design, and `generate_artwork` starts a Roastify render job; `npub` and `dpop_token` use the fleet's shared descriptions; the server reports its own version, website and icon.
