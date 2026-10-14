@@ -24,12 +24,20 @@ import uuid
 from typing import Annotated, Any
 
 from fastmcp import FastMCP
-from pydantic import BeforeValidator, Field
+from mcp.types import Icon
+from pydantic import BeforeValidator
 from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.credential_validators import validate_btcpay_creds
+from tollbooth.params import DpopToken, PatronNpub
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.session_cache import SessionCache
-from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity
+from tollbooth.tool_identity import (
+    CREATES_REMOTE,
+    DELETES_REMOTE,
+    READS_REMOTE,
+    STANDARD_IDENTITIES,
+    ToolIdentity,
+)
 
 from roastify_mcp import __version__, dieline, github_store, roastify
 
@@ -41,6 +49,9 @@ logger = logging.getLogger(__name__)
 
 mcp = FastMCP(
     "roastify-mcp",
+    version=__version__,
+    website_url="https://roastify.tollbooth-dpyc.com",
+    icons=[Icon(src="https://tollbooth-dpyc.com/dpyc-logo.png", mimeType="image/png")],
     instructions=(
         "Roastify MCP — AI agent access to the Roastify coffee catalog and "
         "packaging artwork generation, monetized via Tollbooth DPYC Bitcoin "
@@ -168,36 +179,44 @@ LIST_DESIGN_VERSIONS_UUID = "38ac7bb5-ca0e-53c7-a559-fda2b9508ba5"
 _DOMAIN_TOOLS = [
     ToolIdentity(
         tool_id=BROWSE_CATALOG_UUID, capability="browse_catalog", category="read",
+        title="Browse the catalog", behavior=READS_REMOTE,
         intent="List the Roastify catalog with coffee blends and plan tiers",
     ),
     ToolIdentity(
         tool_id=GET_CATALOG_PRODUCT_UUID, capability="get_catalog_product", category="read",
+        title="Get a catalog product", behavior=READS_REMOTE,
         intent="Get one catalog product with its variants and dieline template",
     ),
     ToolIdentity(
         tool_id=GET_BLEND_UUID, capability="get_blend", category="read",
+        title="Get a blend", behavior=READS_REMOTE,
         intent="Get one coffee blend with roast level and its variants",
     ),
     ToolIdentity(
         tool_id=LIST_MY_PRODUCTS_UUID, capability="list_my_products", category="read",
+        title="List my products", behavior=READS_REMOTE,
         intent="List the merchant's own saved product designs",
     ),
     ToolIdentity(
         tool_id=GET_MY_PRODUCT_UUID, capability="get_my_product", category="read",
+        title="Get my product", behavior=READS_REMOTE,
         intent="Get one of the merchant's saved product designs",
     ),
     ToolIdentity(
         tool_id=CHECK_STOCK_UUID, capability="check_stock", category="read",
+        title="Check stock", behavior=READS_REMOTE,
         intent="Check stock for one SKU or the whole list",
     ),
     ToolIdentity(
         tool_id=GENERATE_ARTWORK_UUID, capability="generate_artwork", category="write",
+        title="Generate artwork", behavior=CREATES_REMOTE,
         intent="Generate packaging artwork from a saved Design Studio template",
     ),
     # Free by category — the wheel gates it without consulting Neon. Polling is how
     # you learn the work finished; metering each look would charge for waiting.
     ToolIdentity(
         tool_id=ARTWORK_STATUS_UUID, capability="artwork_status", category="free",
+        title="Artwork job status", behavior=READS_REMOTE,
         intent="Check a Roastify artwork job",
     ),
     # Design library — the patron's own designs, held in the operator's Neon.
@@ -205,44 +224,54 @@ _DOMAIN_TOOLS = [
     # needs the merchant session and is done by the browser courier, not here.
     ToolIdentity(
         tool_id=STASH_DESIGN_UUID, capability="stash_design", category="write",
+        title="Stash a design", behavior=CREATES_REMOTE,
         intent="Store a Roastify design JSON in the patron's library",
     ),
     ToolIdentity(
         tool_id=FETCH_DESIGN_UUID, capability="fetch_design", category="read",
+        title="Fetch a design", behavior=READS_REMOTE,
         intent="Fetch one stored design from the patron's library",
     ),
     ToolIdentity(
         tool_id=LIST_DESIGNS_UUID, capability="list_designs", category="read",
+        title="List designs", behavior=READS_REMOTE,
         intent="List the patron's stored designs",
     ),
     ToolIdentity(
         tool_id=DELETE_DESIGN_UUID, capability="delete_design", category="write",
+        title="Delete a design", behavior=DELETES_REMOTE,
         intent="Delete one stored design from the patron's library",
     ),
     # Field-level editing — read the text layers, write a text-edited variant.
     # Small on the wire (no images), so an agent can drive product copy in chat.
     ToolIdentity(
         tool_id=GET_DESIGN_TEXT_UUID, capability="get_design_text", category="read",
+        title="Get design text", behavior=READS_REMOTE,
         intent="List editable text layers, non-text elements, fonts, and z-order of a stored design",
     ),
     ToolIdentity(
         tool_id=UPDATE_DESIGN_TEXT_UUID, capability="update_design_text", category="write",
+        title="Update design text", behavior=CREATES_REMOTE,
         intent="Save a text-edited copy of a stored design as a new design",
     ),
     ToolIdentity(
         tool_id=ADD_DESIGN_ELEMENT_UUID, capability="add_design_element", category="write",
+        title="Add a design element", behavior=CREATES_REMOTE,
         intent="Add a new text or image element to a stored design, saved as a new design",
     ),
     ToolIdentity(
         tool_id=MOVE_ELEMENTS_UUID, capability="move_elements", category="write",
+        title="Move design elements", behavior=CREATES_REMOTE,
         intent="Shift, resize, restyle (align/fontFamily), or reorder elements, saved as a new design",
     ),
     ToolIdentity(
         tool_id=SET_PRODUCT_DESCRIPTION_UUID, capability="set_product_description", category="write",
+        title="Set product description", behavior=CREATES_REMOTE,
         intent="Set the product's store-page description on a stored design, committed in place",
     ),
     ToolIdentity(
         tool_id=LIST_DESIGN_VERSIONS_UUID, capability="list_design_versions", category="read",
+        title="List design versions", behavior=READS_REMOTE,
         intent="List a design's committed versions (date, message, tag) to pick from",
     ),
 ]
@@ -461,12 +490,6 @@ async def _call(npub: str, fn: Any, *args: Any, **kwargs: Any) -> dict[str, Any]
 # Domain tools — reads
 # ---------------------------------------------------------------------------
 
-_NPUB = Annotated[
-    str,
-    Field(description="Required. Your Nostr public key (npub1...) for credit billing."),
-]
-
-
 def coerce_str_dict(value: Any) -> dict[str, str]:
     """Normalize a ``{str: str}`` tool arg that may arrive as a JSON object string.
 
@@ -500,7 +523,7 @@ _STR_DICT = Annotated[dict[str, str], BeforeValidator(coerce_str_dict)]
 
 @tool
 @runtime.paid_tool(BROWSE_CATALOG_UUID)
-async def browse_catalog(npub: _NPUB = "", dpop_token: str = "") -> dict[str, Any]:
+async def browse_catalog(npub: PatronNpub = "", dpop_token: DpopToken = "") -> dict[str, Any]:
     """Browse the Roastify catalog: products and coffee blends together.
 
     Plan-gated items are returned with their tier marked, not hidden.
@@ -514,8 +537,8 @@ async def browse_catalog(npub: _NPUB = "", dpop_token: str = "") -> dict[str, An
 
 @tool
 @runtime.paid_tool(GET_CATALOG_PRODUCT_UUID)
-async def get_catalog_product(product_id: str, npub: _NPUB = "",
-                              dpop_token: str = "") -> dict[str, Any]:
+async def get_catalog_product(product_id: str, npub: PatronNpub = "",
+                              dpop_token: DpopToken = "") -> dict[str, Any]:
     """Get one catalog product with its variants, sizes, prices, and dieline.
 
     Args:
@@ -526,8 +549,8 @@ async def get_catalog_product(product_id: str, npub: _NPUB = "",
 
 @tool
 @runtime.paid_tool(GET_BLEND_UUID)
-async def get_blend(blend_id: str, npub: _NPUB = "",
-                    dpop_token: str = "") -> dict[str, Any]:
+async def get_blend(blend_id: str, npub: PatronNpub = "",
+                    dpop_token: DpopToken = "") -> dict[str, Any]:
     """Get one coffee blend: roast level, decaf status, and its variants.
 
     Args:
@@ -538,8 +561,8 @@ async def get_blend(blend_id: str, npub: _NPUB = "",
 
 @tool
 @runtime.paid_tool(LIST_MY_PRODUCTS_UUID)
-async def list_my_products(cursor: str = "", limit: int = 20, npub: _NPUB = "",
-                           dpop_token: str = "") -> dict[str, Any]:
+async def list_my_products(cursor: str = "", limit: int = 20, npub: PatronNpub = "",
+                           dpop_token: DpopToken = "") -> dict[str, Any]:
     """List your own saved Roastify product designs, one page at a time.
 
     Returns has_next_page and end_cursor so you can tell a page from a
@@ -554,8 +577,8 @@ async def list_my_products(cursor: str = "", limit: int = 20, npub: _NPUB = "",
 
 @tool
 @runtime.paid_tool(GET_MY_PRODUCT_UUID)
-async def get_my_product(product_id: str, npub: _NPUB = "",
-                         dpop_token: str = "") -> dict[str, Any]:
+async def get_my_product(product_id: str, npub: PatronNpub = "",
+                         dpop_token: DpopToken = "") -> dict[str, Any]:
     """Get one of your saved product designs in full, with all its variants.
 
     The coffee's IDENTITY (which blend) is not a named field — it is encoded in the
@@ -571,8 +594,8 @@ async def get_my_product(product_id: str, npub: _NPUB = "",
 
 @tool
 @runtime.paid_tool(CHECK_STOCK_UUID)
-async def check_stock(sku: str = "", npub: _NPUB = "",
-                      dpop_token: str = "") -> dict[str, Any]:
+async def check_stock(sku: str = "", npub: PatronNpub = "",
+                      dpop_token: DpopToken = "") -> dict[str, Any]:
     """Check Roastify stock for one SKU, or the whole stock list.
 
     Args:
@@ -592,8 +615,8 @@ async def generate_artwork(
     product_id: str,
     fields: list[dict[str, Any]],
     client_req_id: str = "",
-    npub: _NPUB = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Generate packaging artwork from one of your saved Design Studio designs.
 
@@ -627,8 +650,8 @@ async def generate_artwork(
 
 @tool
 @runtime.paid_tool(ARTWORK_STATUS_UUID)
-async def artwork_status(job_id: str, npub: _NPUB = "",
-                         dpop_token: str = "") -> dict[str, Any]:
+async def artwork_status(job_id: str, npub: PatronNpub = "",
+                         dpop_token: DpopToken = "") -> dict[str, Any]:
     """Check a Roastify artwork job. Free — polling never costs anything.
 
     A finished job carries ``artwork_url``; a failed one carries ``error``.
@@ -729,8 +752,8 @@ async def stash_design(
     commit_message: str = "",
     version_tag: str = "",
     design_id: str = "",
-    npub: _NPUB = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Store a Roastify design JSON in your library (a commit in your GitHub repo).
 
@@ -777,8 +800,8 @@ async def stash_design(
 
 @tool
 @runtime.paid_tool(FETCH_DESIGN_UUID)
-async def fetch_design(design_id: str, ref: str = "", npub: _NPUB = "",
-                       dpop_token: str = "") -> dict[str, Any]:
+async def fetch_design(design_id: str, ref: str = "", npub: PatronNpub = "",
+                       dpop_token: DpopToken = "") -> dict[str, Any]:
     """Fetch one of your stored designs in full, with its images re-inlined.
 
     Args:
@@ -800,8 +823,8 @@ async def fetch_design(design_id: str, ref: str = "", npub: _NPUB = "",
 
 @tool
 @runtime.paid_tool(LIST_DESIGN_VERSIONS_UUID)
-async def list_design_versions(design_id: str, npub: _NPUB = "",
-                               dpop_token: str = "") -> dict[str, Any]:
+async def list_design_versions(design_id: str, npub: PatronNpub = "",
+                               dpop_token: DpopToken = "") -> dict[str, Any]:
     """List a stored design's committed versions, newest first — the git history.
 
     Each version carries its `sha`, `short_sha`, `date`, commit `message`, `tag` (the
@@ -823,7 +846,7 @@ async def list_design_versions(design_id: str, npub: _NPUB = "",
 
 @tool
 @runtime.paid_tool(LIST_DESIGNS_UUID)
-async def list_designs(npub: _NPUB = "", dpop_token: str = "") -> dict[str, Any]:
+async def list_designs(npub: PatronNpub = "", dpop_token: DpopToken = "") -> dict[str, Any]:
     """List your stored designs — metadata only, newest first."""
 
     async def op(store: github_store.GitHubStore) -> dict[str, Any]:
@@ -835,8 +858,8 @@ async def list_designs(npub: _NPUB = "", dpop_token: str = "") -> dict[str, Any]
 
 @tool
 @runtime.paid_tool(DELETE_DESIGN_UUID)
-async def delete_design(design_id: str, npub: _NPUB = "",
-                        dpop_token: str = "") -> dict[str, Any]:
+async def delete_design(design_id: str, npub: PatronNpub = "",
+                        dpop_token: DpopToken = "") -> dict[str, Any]:
     """Delete one of your stored designs.
 
     Args:
@@ -854,8 +877,8 @@ async def delete_design(design_id: str, npub: _NPUB = "",
 
 @tool
 @runtime.paid_tool(GET_DESIGN_TEXT_UUID)
-async def get_design_text(design_id: str, npub: _NPUB = "",
-                          dpop_token: str = "") -> dict[str, Any]:
+async def get_design_text(design_id: str, npub: PatronNpub = "",
+                          dpop_token: DpopToken = "") -> dict[str, Any]:
     """List the editable text layers of a stored design — the fields you can change.
 
     Returns each text layer's id, current text, `chars` (its length), font, `align`,
@@ -954,8 +977,8 @@ async def update_design_text(
     label: str = "",
     commit_message: str = "",
     version_tag: str = "",
-    npub: _NPUB = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Apply text edits to a stored design and commit a new version of it.
 
@@ -1055,8 +1078,8 @@ async def add_design_element(
     commit_message: str = "",
     version_tag: str = "",
     client_req_id: str = "",
-    npub: _NPUB = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Add a new element (text or image) to a design and commit a new version of it.
 
@@ -1226,8 +1249,8 @@ async def move_elements(
     label: str = "",
     commit_message: str = "",
     version_tag: str = "",
-    npub: _NPUB = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Move a group of elements together and/or resize elements; commit a new version.
 
@@ -1343,8 +1366,8 @@ async def set_product_description(
     label: str = "",
     commit_message: str = "",
     version_tag: str = "",
-    npub: _NPUB = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Set the product's store-page DESCRIPTION on a stored design, committed in place.
 
