@@ -11,6 +11,7 @@ configureTollbooth({
   slug: "roastify",
   appName: "Roastify",
   mcpUrl: import.meta.env.VITE_MCP_URL as string,
+  operatorUrl: "https://roastify-mcp.fastmcp.app",
 });
 
 // Last guard: a render-time throw shows a calm card, not a white screen.
