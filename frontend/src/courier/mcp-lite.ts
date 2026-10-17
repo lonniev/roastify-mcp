@@ -12,6 +12,8 @@
  * back either as SSE (`event: message\ndata: {json}`) or plain JSON; both parse.
  */
 
+import { bearer } from "./holder-lite";
+
 const MCP_URL = "https://roastify.tollbooth-dpyc.com/mcp";
 const TIMEOUT_MS = 90_000;
 
@@ -30,12 +32,16 @@ interface Rpc {
 async function post(body: unknown): Promise<Response> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  // The connection says who the courier may act as: its holder bearer, or none
+  // (the Bench's proxy then marks the call anonymous).
+  const held = await bearer();
   try {
     return await fetch(MCP_URL, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         accept: "application/json, text/event-stream",
+        ...(held ? { authorization: `Bearer ${held}` } : {}),
         ...(sessionId ? { "mcp-session-id": sessionId } : {}),
       },
       body: JSON.stringify(body),
@@ -103,17 +109,15 @@ async function callMcp(toolName: string, args: Record<string, unknown>): Promise
 type Rec = Record<string, unknown>;
 
 // Courier login is separate from the Bench (different origin, own localStorage).
+// The npub only: its grant stays with the operator, held for this connection.
 const NPUB_KEY = "rcourier:npub:v1";
-const PROOF_KEY = "rcourier:proof:v1";
 
 export const store = {
   npub: (): string => localStorage.getItem(NPUB_KEY) || "",
   setNpub: (v: string): void => localStorage.setItem(NPUB_KEY, v),
-  proof: (): string => localStorage.getItem(PROOF_KEY) || "",
-  setProof: (v: string): void => localStorage.setItem(PROOF_KEY, v),
 };
 
-export interface ProofResult { dpop_token?: string; error?: string }
+export interface ProofResult { dpop_token?: string; held_by_connection?: boolean; error?: string }
 export interface StoredDesignMeta {
   design_id: string; label: string; product_id: string; source_title: string;
   bytes: number; updated_at?: string;
@@ -127,15 +131,15 @@ export interface StoredVersion {
   sha: string; short_sha: string; date?: string; message?: string; tag?: string; commit_url?: string;
 }
 
-// The small set of calls the courier makes. Authed calls carry the stored
-// npub + dpop_token, exactly as the Bench's callTool injects them.
+// The small set of calls the courier makes. Authed calls name the stored npub;
+// the connection proves it.
 export const api = {
   requestProof: (npub: string, verifyAt: string, reason: string) =>
     callMcp("request_npub_proof", { patron_npub: npub, verify_at: verifyAt, reason }) as Promise<ProofResult>,
   receiveProof: (npub: string, dpop: string) =>
     callMcp("receive_npub_proof", { patron_npub: npub, dpop_token: dpop }) as Promise<ProofResult>,
   list: () =>
-    callMcp("list_designs", { npub: store.npub(), dpop_token: store.proof() }) as
+    callMcp("list_designs", { npub: store.npub() }) as
       Promise<{ success: boolean; designs?: StoredDesignMeta[]; error?: string }>,
   stash: (design: Rec,
           o: { label?: string; productId?: string; sourceTitle?: string; description?: string;
@@ -144,15 +148,15 @@ export const api = {
       design, label: o.label ?? "", product_id: o.productId ?? "", source_title: o.sourceTitle ?? "",
       description: o.description ?? "",
       commit_message: o.commitMessage ?? "", version_tag: o.versionTag ?? "",
-      design_id: o.designId ?? "", npub: store.npub(), dpop_token: store.proof(),
+      design_id: o.designId ?? "", npub: store.npub(),
     }) as Promise<{ success: boolean; assets?: number; error?: string }>,
   fetch: (designId: string, ref = "") =>
-    callMcp("fetch_design", { design_id: designId, ref, npub: store.npub(), dpop_token: store.proof() }) as
+    callMcp("fetch_design", { design_id: designId, ref, npub: store.npub() }) as
       Promise<{ success: boolean; design?: Rec; description?: string; error?: string }>,
   listVersions: (designId: string) =>
-    callMcp("list_design_versions", { design_id: designId, npub: store.npub(), dpop_token: store.proof() }) as
+    callMcp("list_design_versions", { design_id: designId, npub: store.npub() }) as
       Promise<{ success: boolean; versions?: StoredVersion[]; error?: string }>,
   del: (designId: string) =>
-    callMcp("delete_design", { design_id: designId, npub: store.npub(), dpop_token: store.proof() }) as
+    callMcp("delete_design", { design_id: designId, npub: store.npub() }) as
       Promise<{ success: boolean; deleted?: boolean; error?: string }>,
 };
