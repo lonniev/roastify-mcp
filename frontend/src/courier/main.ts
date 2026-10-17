@@ -16,6 +16,7 @@
  * courier lives (merchant origin) but the MCP is on the Bench's origin. The MCP is
  * reached through the Bench's Cloudflare proxy (Access-Control-Allow-Origin: *).
  */
+import { connect, isHolder } from "./holder-lite";
 import { api, store, type StoredDesignMeta, type StoredVersion } from "./mcp-lite";
 
 type Rec = Record<string, unknown>;
@@ -392,8 +393,14 @@ function main(): void {
     const npub = val("npub").trim();
     if (!/^npub1[0-9a-z]+$/.test(npub)) { log("✗ enter a valid npub1… key"); return; }
     ($("send") as HTMLButtonElement).disabled = true;
-    log("sending login DM…");
     try {
+      // The grant will stay with the operator, so connect to it first (a
+      // popup that closes itself), then send the DM.
+      if (!isHolder()) {
+        log("connecting to Roastify…");
+        await connect();
+      }
+      log("sending login DM…");
       const r = await api.requestProof(
         npub, location.origin, `You requested to log in to Roastify (${location.host}).`,
       );
@@ -415,8 +422,7 @@ function main(): void {
     try {
       const r = await api.receiveProof(npub, pendingProof);
       if (r.error) { log("✗ " + r.error); return; }
-      const token = r.dpop_token || pendingProof;
-      store.setProof(token);
+      if (!r.held_by_connection) { log("✗ the service did not keep the sign-in for this connection"); return; }
       $("login").style.display = "none";
       $("work").style.display = "flex";
       $("who").textContent = `✓ ${npub.slice(0, 16)}… logged in`;
@@ -856,7 +862,7 @@ function main(): void {
   };
 
   // Already logged in on this origin? Skip straight to work.
-  if (store.npub() && store.proof()) {
+  if (store.npub() && isHolder()) {
     $("login").style.display = "none";
     $("work").style.display = "flex";
     $("who").textContent = `✓ ${store.npub().slice(0, 16)}… logged in`;

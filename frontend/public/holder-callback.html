@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connecting…</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center;
+           font: 16px/1.4 system-ui, sans-serif; background: Canvas; color: CanvasText; }
+  </style>
+</head>
+<body>
+  <p>Connected. This window closes itself.</p>
+  <script>
+    // The operator sent this popup back with an authorization code. Hand it to
+    // the courier that opened us; PKCE makes the code useless to anyone else.
+    const q = new URLSearchParams(location.search);
+    if (window.opener && q.get("code")) {
+      window.opener.postMessage({ type: "dpyc-holder-code", code: q.get("code"), state: q.get("state") }, "*");
+    }
+    setTimeout(() => window.close(), 300);
+  </script>
+</body>
+</html>
