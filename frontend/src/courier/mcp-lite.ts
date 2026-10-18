@@ -117,7 +117,7 @@ export const store = {
   setNpub: (v: string): void => localStorage.setItem(NPUB_KEY, v),
 };
 
-export interface ProofResult { dpop_token?: string; held_by_connection?: boolean; error?: string }
+export interface ProofResult { nonce?: string; held_by_connection?: boolean; error?: string }
 export interface StoredDesignMeta {
   design_id: string; label: string; product_id: string; source_title: string;
   bytes: number; updated_at?: string;
@@ -136,8 +136,8 @@ export interface StoredVersion {
 export const api = {
   requestProof: (npub: string, verifyAt: string, reason: string) =>
     callMcp("request_npub_proof", { patron_npub: npub, verify_at: verifyAt, reason }) as Promise<ProofResult>,
-  receiveProof: (npub: string, dpop: string) =>
-    callMcp("receive_npub_proof", { patron_npub: npub, dpop_token: dpop }) as Promise<ProofResult>,
+  receiveProof: (npub: string, nonce: string) =>
+    callMcp("receive_npub_proof", { patron_npub: npub, nonce }) as Promise<ProofResult>,
   list: () =>
     callMcp("list_designs", { npub: store.npub() }) as
       Promise<{ success: boolean; designs?: StoredDesignMeta[]; error?: string }>,
