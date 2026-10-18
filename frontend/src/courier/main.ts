@@ -7,8 +7,8 @@
  * does all editing and font-repair.
  *
  * Auth is the standard DPYC protocol: the user logs into roastify-mcp with their
- * npub via the DM-proof dance, and the courier sends its held dpop_token on every
- * tool call. The merchant origin's localStorage is separate from the Bench, so
+ * npub via the DM-proof dance into the courier's holder connection, which proves
+ * it on every tool call. The merchant origin's localStorage is separate from the Bench, so
  * the courier logs in once here.
  *
  * MCP calls go through a minimal POST-based client (./mcp-lite), NOT the official
@@ -404,9 +404,9 @@ function main(): void {
       const r = await api.requestProof(
         npub, location.origin, `You requested to log in to Roastify (${location.host}).`,
       );
-      if (r.error || !r.dpop_token) { log("✗ " + (r.error || "no session phrase returned")); return; }
+      if (r.error || !r.nonce) { log("✗ " + (r.error || "no session phrase returned")); return; }
       store.setNpub(npub);
-      pendingProof = r.dpop_token;
+      pendingProof = r.nonce;
       $("await").style.display = "block";
       log("DM sent. Reply to it, then tap confirm.");
     } catch (e) {

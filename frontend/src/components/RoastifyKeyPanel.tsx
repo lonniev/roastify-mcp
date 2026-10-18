@@ -52,8 +52,8 @@ export default function RoastifyKeyPanel() {
     setProblem("");
     try {
       const r = await requestPatronCredentials();
-      if (r.success && r.dpop_token) {
-        setPhase({ kind: "sent", phrase: r.dpop_token, relay: r.rendezvous_relay ?? "" });
+      if (r.success && r.nonce) {
+        setPhase({ kind: "sent", phrase: r.nonce, relay: r.rendezvous_relay ?? "" });
       } else {
         setProblem(r.message ?? "The invitation could not be sent.");
       }

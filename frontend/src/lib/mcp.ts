@@ -9,7 +9,7 @@
  * courier conversation that carries the patron's Roastify key.
  */
 
-import { callTool, getStoredNpub, getStoredProof } from "@tollbooth-dpyc/web";
+import { callTool, getStoredNpub } from "@tollbooth-dpyc/web";
 
 // ─── Roastify catalog ────────────────────────────────────────────────────
 
@@ -221,17 +221,15 @@ export interface PatronOnboardingResult {
 }
 
 export async function getPatronOnboardingStatus(): Promise<PatronOnboardingResult> {
-  // Envelope-free: takes patron_npub + the cached phrase explicitly, like
-  // check_proof_status. Sending the injected npub/dpop_token pair is rejected.
+  // Names the patron as patron_npub; the connection proves it.
   return callTool<PatronOnboardingResult>("get_patron_onboarding_status", {
     patron_npub: getStoredNpub(),
-    dpop_token: getStoredProof(),
   });
 }
 
 export interface RequestPatronCredentialsResult {
   success: boolean;
-  dpop_token?: string;
+  nonce?: string;
   rendezvous_relay?: string;
   instructions?: string;
   message?: string;
@@ -251,9 +249,9 @@ export interface ReceivePatronCredentialsResult {
   error?: string;
 }
 
-export async function receivePatronCredentials(dpopToken: string) {
+export async function receivePatronCredentials(nonce: string) {
   return callTool<ReceivePatronCredentialsResult>("receive_patron_credentials", {
     sender_npub: getStoredNpub(),
-    dpop_token: dpopToken,
+    nonce,
   });
 }
