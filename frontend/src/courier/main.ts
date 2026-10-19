@@ -394,8 +394,8 @@ function main(): void {
     if (!/^npub1[0-9a-z]+$/.test(npub)) { log("✗ enter a valid npub1… key"); return; }
     ($("send") as HTMLButtonElement).disabled = true;
     try {
-      // The grant will stay with the operator, so connect to it first (a
-      // popup that closes itself), then send the DM.
+      // The grant will stay with the operator, so connect to it first, then
+      // send the DM.
       if (!isHolder()) {
         log("connecting to Roastify…");
         await connect();

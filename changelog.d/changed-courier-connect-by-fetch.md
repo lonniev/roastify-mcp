@@ -1,0 +1,1 @@
+- The Design Courier connects to Roastify MCP with a background fetch, so signing in opens no popup. The Bench's `holder-callback.html` page is removed.
