@@ -1,1 +1,0 @@
-- The courier signs in as a holder: a one-time Roastify popup, then the usual Nostr DM proves your npub into it. Calls carry no proof argument.
