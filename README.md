@@ -4,8 +4,9 @@ A [Tollbooth DPYC](https://github.com/lonniev/dpyc-community) operator for the
 [Roastify](https://roastify.app/) Developer API. Roastify is a white-label coffee
 dropshipper: it roasts, prints branded packaging, and ships direct to customers.
 
-This operator lets an AI agent read the Roastify catalog and generate packaging artwork,
-paid for in Bitcoin Lightning satoshis with no account, no KYC, and no subscription.
+This operator lets an AI agent read the Roastify catalog, generate packaging artwork, and
+keep a private library of designs in a GitHub repo the patron owns — paid for in Bitcoin
+Lightning satoshis with no account, no KYC, and no subscription.
 
 ## What you're building
 
@@ -44,7 +45,7 @@ paid for in Bitcoin Lightning satoshis with no account, no KYC, and no subscript
 3. **Secure Courier** — deliver your BTCPay secrets (`btcpay_host`, `btcpay_api_key`,
    `btcpay_store_id`) by Nostr DM. They are vaulted, never put in the environment.
 4. **Set prices in Pricing Studio** — see below. Tools start unpriced and uncallable.
-5. **Deploy on Prefect Horizon** — `.fastmcp.yaml` is ready.
+5. **Deploy on Prefect Horizon** — `fastmcp.json` is ready.
 
 ### Get Pricing Studio
 
@@ -76,6 +77,10 @@ roastify_request_patron_credentials     # → you get a Nostr DM
 roastify_receive_patron_credentials     # vaulted, encrypted at rest
 ```
 
+The same reply may carry the optional `github_token` (a fine-grained token with Contents
+read/write), `github_repo` (`owner/repo`) and `github_branch` (default `main`) that the design
+library needs.
+
 Live keys start `rty_live_`. Sandbox keys start `rty_test_` and do not fulfill — useful for
 exercising the read tools without touching production.
 
@@ -86,11 +91,22 @@ exercising the read tools without touching production.
 | `roastify_browse_catalog` | read | Catalog products and coffee blends together, plan tier marked |
 | `roastify_get_catalog_product` | read | One product with variants, prices, stock, dieline template |
 | `roastify_get_blend` | read | One blend: roast level, decaf status, variants |
-| `roastify_list_my_products` | read | Your saved designs, cursor-paginated |
-| `roastify_get_my_product` | read | One saved design in full |
+| `roastify_list_my_products` | read | Your saved Roastify products, cursor-paginated |
+| `roastify_get_my_product` | read | One saved product design in full |
 | `roastify_check_stock` | read | Stock for one SKU or the whole list |
 | `roastify_generate_artwork` | write | Generate artwork from a saved design |
 | `roastify_artwork_status` | free | Check that job |
+| **Design library** | | |
+| `roastify_stash_design` | write | Store a design in your library — a commit in your GitHub repo |
+| `roastify_list_designs` | read | Your stored designs, metadata only, newest first |
+| `roastify_fetch_design` | read | One stored design in full, images re-inlined (for the courier) |
+| `roastify_list_design_versions` | read | A design's committed versions — its git history |
+| `roastify_delete_design` | write | Delete one stored design |
+| `roastify_get_design_text` | read | A design's editable text layers, with each layer's size |
+| `roastify_update_design_text` | write | Apply text edits and commit a new version |
+| `roastify_add_design_element` | write | Add a text or image element and commit a new version |
+| `roastify_move_elements` | write | Move or resize a group of elements and commit a new version |
+| `roastify_set_product_description` | write | Set the product's store-page description on a stored design |
 
 Plus the standard DPYC catalog (balance, purchase, courier, pricing, Oracle, status).
 
@@ -120,6 +136,25 @@ exist only in the Merchant App UI. The machine-readable signals are `roastLevel`
 size, and price; everything else about a coffee's character is prose in its description. Bean
 selection is correspondingly weaker than it looks, and this operator does not dress up an
 LLM's reading of a description as structured provenance data.
+
+## The design library, the courier and the Design Bench
+
+Designs live in a GitHub repo the patron owns, one folder per design, and the operator commits
+to it on the patron's behalf with the vaulted token. Every save is a commit, so a design has
+real version history, and the patron can browse, rename or delete designs in GitHub itself.
+
+Reading or writing a design on a Roastify product needs the merchant's own browser session,
+which no API offers. `frontend/` carries two pieces for that:
+
+- **The courier** — a script a bookmarklet injects into `merchant.roastify.app`. It stashes a
+  product's design into the library and applies a finished design back onto a product. It
+  holds no editing logic.
+- **The Design Bench** — the web app at `roastify.tollbooth-dpyc.com`, where designs are edited.
+  Its Cloudflare function proxies `/mcp` so the courier can reach this operator from the
+  merchant's origin.
+
+An agent edits a design's text with `roastify_get_design_text` and `roastify_update_design_text`;
+the human applies the new version with the courier.
 
 ## Artwork is asynchronous
 

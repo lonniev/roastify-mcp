@@ -1,0 +1,1 @@
+- The README matches the code: the tools table lists the design-library tools, the optional GitHub credentials, the courier and the Design Bench are described, and the deploy file is `fastmcp.json`.
