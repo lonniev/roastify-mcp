@@ -4,10 +4,9 @@
 
 import type { ReactNode } from "react";
 import type { Theme } from "@tollbooth-dpyc/web";
-import { AccountPage, useAppShell } from "@tollbooth-dpyc/web/react";
-import RoastifyKeyPanel from "./RoastifyKeyPanel";
+import { AccountPage, PatronCredentialsPanel, useAppShell } from "@tollbooth-dpyc/web/react";
 import Coupons from "./Coupons";
-import { accountLook, buildInfoLook, timezonePickerLook, usageLook } from "../lib/look";
+import { accountLook, buildInfoLook, keyPanelLook, timezonePickerLook, usageLook } from "../lib/look";
 
 const THEME_LABELS: Record<Theme, { label: string; hint: string }> = {
   dark: { label: "Dark", hint: "Default" },
@@ -43,7 +42,23 @@ export default function ProfilePage() {
       npub={session.npub}
       onSignOut={session.signOut}
       classNames={accountLook}
-      between={{ sessionKey: <RoastifyKeyPanel />, coupons: <Coupons /> }}
+      between={{
+        sessionKey: (
+          <PatronCredentialsPanel
+            npub={session.npub}
+            heading="Your Roastify account"
+            connectedText="Your catalog and designs are the ones in your own Roastify account."
+            inviteText="Connect your Roastify account to see your catalog and your saved designs."
+            keySource={{
+              href: "https://merchant.roastify.app/developers",
+              label: "Get a key",
+              title: "Where your Roastify API key is created",
+            }}
+            classNames={keyPanelLook}
+          />
+        ),
+        coupons: <Coupons />,
+      }}
       usage={{ classNames: usageLook }}
       timezone={{
         heading: "Display timezone",

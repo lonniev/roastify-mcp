@@ -4,12 +4,11 @@
  * The client core is the package's: the one MCP connection, the npub/proof
  * envelope, the proof-bounce signal, identity storage and the standard tools
  * (service status, proofs, balance, top-up, payment, statement, coupons,
- * profile, patron credential fields). What stays here is Roastify's alone:
- * the catalog, the merchant's products, the design library, artwork, and the
- * courier conversation that carries the patron's Roastify key.
+ * profile, patron credentials). What stays here is Roastify's alone:
+ * the catalog, the merchant's products, the design library and artwork.
  */
 
-import { callTool, getStoredNpub } from "@tollbooth-dpyc/web";
+import { callTool } from "@tollbooth-dpyc/web";
 
 // ─── Roastify catalog ────────────────────────────────────────────────────
 
@@ -200,58 +199,4 @@ export interface ArtworkStatusResult {
 
 export async function artworkStatus(jobId: string): Promise<ArtworkStatusResult> {
   return callTool<ArtworkStatusResult>("artwork_status", { job_id: jobId });
-}
-
-// ─── Patron credentials (the Roastify key) ───────────────────────────────
-
-export interface OnboardingField {
-  field: string;
-  category?: string;
-  status?: string;
-  lifecycle?: string;
-  how?: string;
-}
-
-export interface PatronOnboardingResult {
-  ready: boolean;
-  configured: OnboardingField[];
-  missing: OnboardingField[];
-  summary?: string;
-  credential_service?: string;
-}
-
-export async function getPatronOnboardingStatus(): Promise<PatronOnboardingResult> {
-  // Names the patron as patron_npub; the connection proves it.
-  return callTool<PatronOnboardingResult>("get_patron_onboarding_status", {
-    patron_npub: getStoredNpub(),
-  });
-}
-
-export interface RequestPatronCredentialsResult {
-  success: boolean;
-  nonce?: string;
-  rendezvous_relay?: string;
-  instructions?: string;
-  message?: string;
-}
-
-export async function requestPatronCredentials(): Promise<RequestPatronCredentialsResult> {
-  return callTool<RequestPatronCredentialsResult>("request_patron_credentials", {
-    sender_npub: getStoredNpub(),
-  });
-}
-
-export interface ReceivePatronCredentialsResult {
-  success: boolean;
-  stored_fields?: string[];
-  still_missing_required?: string[];
-  message?: string;
-  error?: string;
-}
-
-export async function receivePatronCredentials(nonce: string) {
-  return callTool<ReceivePatronCredentialsResult>("receive_patron_credentials", {
-    sender_npub: getStoredNpub(),
-    nonce,
-  });
 }
