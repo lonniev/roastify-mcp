@@ -6,6 +6,7 @@ import type {
   AccountPageClassNames,
   BuildInfoPanelClassNames,
   CouponsPanelClassNames,
+  PatronCredentialsPanelClassNames,
   RefreshButtonClassNames,
   SiteNavClassNames,
   TimezonePickerClassNames,
@@ -167,4 +168,13 @@ const refreshButton =
 export const refreshLook: Record<"toolbar" | "header", RefreshButtonClassNames> = {
   toolbar: { root: `${refreshButton} h-12 w-12`, spinning: "animate-spin" },
   header: { root: `${refreshButton} h-10 w-10`, spinning: "animate-spin" },
+};
+
+export const keyPanelLook: PatronCredentialsPanelClassNames = {
+  root: "rounded-xl border border-stone-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4",
+  primary:
+    "rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-50",
+  chip: "rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-stone-50 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800",
+  link: "text-stone-500 underline-offset-2 hover:underline dark:text-zinc-400",
+  phrase: "text-stone-800 dark:text-zinc-200",
 };
