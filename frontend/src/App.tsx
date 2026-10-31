@@ -1,12 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import type { ServiceStatus } from "@tollbooth-dpyc/web";
-import { AppShell } from "@tollbooth-dpyc/web/react";
+import { AppShell, Wallet } from "@tollbooth-dpyc/web/react";
 import Nav from "./components/Nav";
 import Hero from "./components/Hero";
 import CatalogPage from "./components/CatalogPage";
 import DesignsPage from "./components/DesignsPage";
 import BenchPage from "./components/BenchPage";
-import Wallet from "./components/Wallet";
 import ProfilePage from "./components/ProfilePage";
 
 /** The site's own words above the sign-in card. */
@@ -38,7 +37,14 @@ export default function App() {
               <Route index element={<CatalogPage />} />
               <Route path="designs" element={<DesignsPage />} />
               <Route path="bench" element={<BenchPage />} />
-              <Route path="wallet" element={<Wallet />} />
+              <Route
+                path="wallet"
+                element={
+                  <div className="max-w-3xl mx-auto px-4 py-6">
+                    <Wallet />
+                  </div>
+                }
+              />
               <Route path="profile" element={<ProfilePage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
