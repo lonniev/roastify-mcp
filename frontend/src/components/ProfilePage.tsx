@@ -1,11 +1,9 @@
 // Profile: the package's AccountPage in the Bench's look, with Roastify's own
-// panels in its slots — the Roastify key after the session key, and Roastify's
-// coupon rows in place of the package's.
+// panel in its slot — the Roastify key after the session key.
 
 import type { ReactNode } from "react";
 import type { Theme } from "@tollbooth-dpyc/web";
 import { AccountPage, PatronCredentialsPanel, useAppShell } from "@tollbooth-dpyc/web/react";
-import Coupons from "./Coupons";
 import { accountLook, buildInfoLook, keyPanelLook, timezonePickerLook, usageLook } from "../lib/look";
 
 const THEME_LABELS: Record<Theme, { label: string; hint: string }> = {
@@ -57,7 +55,6 @@ export default function ProfilePage() {
             classNames={keyPanelLook}
           />
         ),
-        coupons: <Coupons />,
       }}
       usage={{ classNames: usageLook }}
       timezone={{
@@ -79,7 +76,6 @@ export default function ProfilePage() {
         labels: themeLabels,
         classNames: themeLook,
       }}
-      coupons={false}
       build={{
         status,
         frontend: {
