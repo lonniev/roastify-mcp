@@ -1,9 +1,3 @@
-# Roastify Design Bench
-
-> A web app for curating coffee packaging. Browse the Roastify catalog, open the
-> designs you saved in Roastify's Design Studio, and generate new packaging
-> artwork by changing the words on a template you already made. Identity is a
-> Nostr keypair (npub) — no account, no email, no subscription, no KYC.
 
 Roastify Design Bench is a single-page web app backed by roastify-mcp, a Model
 Context Protocol server. Humans use the web UI; AI agents can call the same MCP
@@ -41,10 +35,3 @@ Studio, and publishes no way to ask which names a design has. The Bench answers
 that in the browser: you open the design's exported .json and it lists the named
 layers, shows where each one prints on the unfolded box, and flags any value
 that prints in more than one place. The file is never uploaded.
-
-## Links
-
-- MCP service: https://roastify-mcp.fastmcp.app/mcp
-- Source: https://github.com/lonniev/roastify-mcp
-- Roastify: https://roastify.app
-- Monetized with Tollbooth DPYC: https://tollbooth-dpyc.com
