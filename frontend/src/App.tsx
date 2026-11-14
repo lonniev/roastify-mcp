@@ -1,12 +1,15 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import type { ServiceStatus } from "@tollbooth-dpyc/web";
 import { AppShell, Wallet } from "@tollbooth-dpyc/web/react";
 import Nav from "./components/Nav";
 import Hero from "./components/Hero";
 import CatalogPage from "./components/CatalogPage";
-import DesignsPage from "./components/DesignsPage";
-import BenchPage from "./components/BenchPage";
-import ProfilePage from "./components/ProfilePage";
+
+// Each page past the catalog is its own chunk, fetched the first time it opens.
+const DesignsPage = lazy(() => import("./components/DesignsPage"));
+const BenchPage = lazy(() => import("./components/BenchPage"));
+const ProfilePage = lazy(() => import("./components/ProfilePage"));
 
 /** The site's own words above the sign-in card. */
 const WELCOME = "Your coffee line, and every word printed on it. Catalog, designs and artwork stay with your key.";
@@ -60,7 +63,9 @@ function Layout() {
     <>
       <Nav />
       <main className="flex-1">
-        <Outlet />
+        <Suspense fallback={<p className="py-12 text-center text-sm text-stone-400 dark:text-zinc-500">Loading…</p>}>
+          <Outlet />
+        </Suspense>
       </main>
     </>
   );
