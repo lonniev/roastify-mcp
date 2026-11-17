@@ -1,7 +1,8 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import type { ServiceStatus } from "@tollbooth-dpyc/web";
-import { AppShell, Wallet } from "@tollbooth-dpyc/web/react";
+import { AppShell, LanguageChooser, Tx, Wallet } from "@tollbooth-dpyc/web/react";
+import { useT, WORDS } from "./i18n";
 import Nav from "./components/Nav";
 import Hero from "./components/Hero";
 import CatalogPage from "./components/CatalogPage";
@@ -11,16 +12,14 @@ const DesignsPage = lazy(() => import("./components/DesignsPage"));
 const BenchPage = lazy(() => import("./components/BenchPage"));
 const ProfilePage = lazy(() => import("./components/ProfilePage"));
 
-/** The site's own words above the sign-in card. */
-const WELCOME = "Your coffee line, and every word printed on it. Catalog, designs and artwork stay with your key.";
-
 // The session, the sign-in gate, the theme, the avatar and the debug log are
 // the package's AppShell; Roastify brings its routes, its hero and its footer.
 export default function App() {
+  const t = useT();
   return (
     <AppShell
       theme="dark"
-      gateOptions={{ welcome: WELCOME }}
+      gateOptions={{ welcome: t("ui.app.welcome") }}
       classNames={{ root: "bg-stone-50 dark:bg-zinc-950 text-stone-900 dark:text-zinc-100 transition-colors" }}
       footer={({ status }) => <Footer status={status} />}
       signedOut={({ gate }) => (
@@ -59,11 +58,12 @@ export default function App() {
 }
 
 function Layout() {
+  const t = useT();
   return (
     <>
       <Nav />
       <main className="flex-1">
-        <Suspense fallback={<p className="py-12 text-center text-sm text-stone-400 dark:text-zinc-500">Loading…</p>}>
+        <Suspense fallback={<p className="py-12 text-center text-sm text-stone-400 dark:text-zinc-500">{t("ui.app.loading")}</p>}>
           <Outlet />
         </Suspense>
       </main>
@@ -81,6 +81,13 @@ function TopBar() {
   );
 }
 
+/** The language row in the footer, where every visitor can reach it, signed in or not. */
+const languageLook = {
+  root: "flex flex-wrap justify-center gap-1.5 pt-2",
+  chip: "rounded-full border border-stone-200 px-2.5 py-0.5 text-xs text-stone-500 hover:bg-stone-100 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900",
+  active: "border-amber-400! text-amber-700! dark:border-amber-500/50! dark:text-amber-300!",
+};
+
 function Footer({ status }: { status: ServiceStatus | null }) {
   return (
     <footer className="border-t border-stone-100 px-4 py-3 text-center text-xs text-stone-400 dark:border-zinc-900 dark:text-zinc-600 space-y-0.5">
@@ -90,17 +97,22 @@ function Footer({ status }: { status: ServiceStatus | null }) {
         {status?.tollbooth_dpyc_version && ` · SDK ${status.tollbooth_dpyc_version}`}
       </div>
       <div>
-        Monetized with{" "}
-        <a
-          href="https://tollbooth-dpyc.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-amber-600/80 hover:underline dark:text-amber-400/80"
-        >
-          Tollbooth DPYC™
-        </a>{" "}
-        · Apache-2.0 · Patent Pending (US Prov. 64/045,999)
+        <Tx
+          ns={WORDS}
+          k="ui.app.monetized"
+          components={{
+            dpyc: (
+              <a
+                href="https://tollbooth-dpyc.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-amber-600/80 hover:underline dark:text-amber-400/80"
+              />
+            ),
+          }}
+        />
       </div>
+      <LanguageChooser classNames={languageLook} />
     </footer>
   );
 }

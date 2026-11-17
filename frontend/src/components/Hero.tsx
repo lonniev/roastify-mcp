@@ -6,8 +6,11 @@
 
 import { Coffee, Layers, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
+import { Tx } from "@tollbooth-dpyc/web/react";
+import { useT, WORDS } from "../i18n";
 
 export default function Hero() {
+  const t = useT();
   return (
     <section className="relative overflow-hidden border-b border-stone-200 dark:border-zinc-800">
       {/* ambient gradient — pure CSS, decorative only */}
@@ -30,60 +33,67 @@ export default function Hero() {
               Roastify <span className="font-normal text-stone-400 dark:text-zinc-500">Design Bench</span>
             </div>
             <div className="text-xs uppercase tracking-widest text-amber-600 dark:text-amber-400">
-              Coffee packaging, curated
+              {t("views.hero.tagline")}
             </div>
           </div>
         </div>
 
         <h1 className="max-w-2xl text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">
-          Your coffee line, and every word printed on it.
+          {t("views.hero.title")}
         </h1>
         <p className="mt-4 max-w-2xl text-base leading-relaxed text-stone-600 dark:text-zinc-400">
-          Browse the Roastify catalog, open your saved designs, and generate new packaging
-          artwork from a template you already made — through{" "}
-          <a
-            href="https://github.com/lonniev/roastify-mcp"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-stone-700 underline-offset-2 hover:underline dark:text-zinc-300"
-          >
-            Roastify MCP
-          </a>.
+          <Tx
+            ns={WORDS}
+            k="views.hero.lede"
+            components={{
+              mcp: (
+                <a
+                  href="https://github.com/lonniev/roastify-mcp"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-stone-700 underline-offset-2 hover:underline dark:text-zinc-300"
+                />
+              ),
+            }}
+          />
         </p>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-stone-600 dark:text-zinc-400">
-          Bring your own Roastify key. Sign in with a Nostr key — your catalog, your designs,
-          and your artwork stay with your npub, not a login.
+          {t("views.hero.key")}
         </p>
 
         <div className="mt-8 grid max-w-3xl gap-3 sm:grid-cols-3">
           <Feature
             icon={<Coffee className="h-5 w-5" />}
-            title="The catalog"
-            body="Every base coffee and box, with roast level, sizes, and what is in stock."
+            title={t("views.hero.catalog.title")}
+            body={t("views.hero.catalog.body")}
           />
           <Feature
             icon={<Layers className="h-5 w-5" />}
-            title="Your designs"
-            body="Open a saved design and see every panel it prints across, laid out to scale."
+            title={t("views.hero.designs.title")}
+            body={t("views.hero.designs.body")}
           />
           <Feature
             icon={<Sparkles className="h-5 w-5" />}
-            title="New artwork"
-            body="Change the words on a template and get print-ready artwork back."
+            title={t("views.hero.artwork.title")}
+            body={t("views.hero.artwork.body")}
           />
         </div>
 
         <p className="mt-8 text-xs text-stone-400 dark:text-zinc-500">
-          Powered by{" "}
-          <a
-            href="https://tollbooth-dpyc.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-amber-600/90 hover:underline dark:text-amber-400/90"
-          >
-            Tollbooth DPYC™
-          </a>{" "}
-          — operator-controlled dynamic pricing at the MCP layer.
+          <Tx
+            ns={WORDS}
+            k="views.hero.powered"
+            components={{
+              dpyc: (
+                <a
+                  href="https://tollbooth-dpyc.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-amber-600/90 hover:underline dark:text-amber-400/90"
+                />
+              ),
+            }}
+          />
         </p>
       </div>
     </section>

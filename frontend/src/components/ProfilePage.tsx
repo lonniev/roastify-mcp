@@ -2,30 +2,10 @@
 // panel in its slot — the Roastify key after the session key.
 
 import type { ReactNode } from "react";
-import type { Theme } from "@tollbooth-dpyc/web";
-import { AccountPage, PatronCredentialsPanel, useAppShell } from "@tollbooth-dpyc/web/react";
+import { translate, type Theme } from "@tollbooth-dpyc/web";
+import { AccountPage, LanguageChooser, PatronCredentialsPanel, Tx, useAppShell } from "@tollbooth-dpyc/web/react";
+import { useT, WORDS, type Translate } from "../i18n";
 import { accountLook, buildInfoLook, keyPanelLook, timezonePickerLook, usageLook } from "../lib/look";
-
-const THEME_LABELS: Record<Theme, { label: string; hint: string }> = {
-  dark: { label: "Dark", hint: "Default" },
-  light: { label: "Light", hint: "" },
-  system: { label: "System", hint: "Match OS" },
-};
-
-const themeLabels = Object.fromEntries(
-  (Object.keys(THEME_LABELS) as Theme[]).map((t) => [
-    t,
-    <>
-      <div className="flex items-center gap-2">
-        <ThemeSwatch theme={t} />
-        <span className="text-sm font-medium">{THEME_LABELS[t].label}</span>
-      </div>
-      {THEME_LABELS[t].hint && (
-        <span className="block text-xs text-stone-400 dark:text-zinc-500 mt-1">{THEME_LABELS[t].hint}</span>
-      )}
-    </>,
-  ]),
-) as Record<Theme, ReactNode>;
 
 const themeLook = {
   root: "grid grid-cols-3 gap-2",
@@ -35,6 +15,7 @@ const themeLook = {
 
 export default function ProfilePage() {
   const { session, status } = useAppShell();
+  const t = useT();
   return (
     <AccountPage
       npub={session.npub}
@@ -42,38 +23,43 @@ export default function ProfilePage() {
       classNames={accountLook}
       between={{
         sessionKey: (
+          <>
           <PatronCredentialsPanel
             npub={session.npub}
-            heading="Your Roastify account"
-            connectedText="Your catalog and designs are the ones in your own Roastify account."
-            inviteText="Connect your Roastify account to see your catalog and your saved designs."
+            heading={t("views.profile.account.heading")}
+            connectedText={t("views.profile.account.connected")}
+            inviteText={t("views.profile.account.invite")}
             keySource={{
               href: "https://merchant.roastify.app/developers",
-              label: "Get a key",
-              title: "Where your Roastify API key is created",
+              label: t("views.profile.account.getKey"),
+              title: t("views.profile.account.getKeyTitle"),
             }}
             classNames={keyPanelLook}
           />
+          <section className={accountLook.section}>
+            <h2 className={accountLook.sectionHeading}>{t("views.profile.language.heading")}</h2>
+            <LanguageChooser classNames={themeLook} />
+          </section>
+          </>
         ),
       }}
       usage={{ classNames: usageLook }}
       timezone={{
-        heading: "Display timezone",
-        intro:
-          "Dates on your Wallet — top-ups and when credits expire — and the debug log's times use this zone. Saved on this device.",
-        label: "Zone",
+        heading: t("views.profile.timezone.heading"),
+        intro: t("views.profile.timezone.intro"),
+        label: t("views.profile.timezone.label"),
         id: "tz-select",
-        autoLabel: (zone) => `Auto (browser) — ${zone}`,
-        optionLabel: (o) => `${o.label} — ${o.value}`,
+        autoLabel: (zone) => t("views.profile.timezone.auto", { zone }),
+        optionLabel: (o) => `${o.labelKey ? translate(o.labelKey) : o.label} — ${o.value}`,
         classNames: timezonePickerLook,
         note: (pref, zone) =>
           pref === "auto"
-            ? `Currently resolving to ${zone}.`
-            : `Using ${zone}. Past dates keep the offset that applied at the time.`,
+            ? t("views.profile.timezone.resolving", { zone })
+            : t("views.profile.timezone.using", { zone }),
       }}
       theme={{
-        intro: "Roastify defaults to dark. Your choice is saved on this device.",
-        labels: themeLabels,
+        intro: t("views.profile.theme.intro"),
+        labels: themeLabels(t),
         classNames: themeLook,
       }}
       build={{
@@ -84,18 +70,34 @@ export default function ProfilePage() {
           builtAt: __BUILD_TIME__,
           source: "https://github.com/lonniev/roastify-mcp",
         },
-        intro: (
-          <>
-            Roastify and Tollbooth-DPYC<sup>™</sup> ship as open source under the Apache License 2.0 —
-            anyone can read the code, fork it, run their own operator. The <i>services</i> on top are
-            private commerce: each operator sets their own tolls; patrons pre-fund a Lightning balance
-            and pay per call. The protocol is shared; the businesses on it are not.
-          </>
-        ),
+        intro: <Tx ns={WORDS} k="views.profile.build" components={{ tm: <sup />, i: <i /> }} />,
         classNames: buildInfoLook,
       }}
     />
   );
+}
+
+/** Each theme's name and hint, with its swatch, in the reader's language. */
+function themeLabels(t: Translate): Record<Theme, ReactNode> {
+  const words: Record<Theme, { label: string; hint: string }> = {
+    dark: { label: t("views.profile.theme.dark"), hint: t("views.profile.theme.darkHint") },
+    light: { label: t("views.profile.theme.light"), hint: "" },
+    system: { label: t("views.profile.theme.system"), hint: t("views.profile.theme.systemHint") },
+  };
+  return Object.fromEntries(
+    (Object.keys(words) as Theme[]).map((theme) => [
+      theme,
+      <>
+        <div className="flex items-center gap-2">
+          <ThemeSwatch theme={theme} />
+          <span className="text-sm font-medium">{words[theme].label}</span>
+        </div>
+        {words[theme].hint && (
+          <span className="block text-xs text-stone-400 dark:text-zinc-500 mt-1">{words[theme].hint}</span>
+        )}
+      </>,
+    ]),
+  ) as Record<Theme, ReactNode>;
 }
 
 function ThemeSwatch({ theme }: { theme: Theme }) {

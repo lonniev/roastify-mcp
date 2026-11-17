@@ -6,6 +6,7 @@
 // true coordinates on the unfolded box, that is visible at a glance.
 
 import type { DesignDoc, DesignLayer } from "../lib/design";
+import { useT } from "../i18n";
 
 export default function PanelMap({
   doc,
@@ -15,6 +16,7 @@ export default function PanelMap({
   /** Layer ids to call out — typically every place one value appears. */
   highlight?: string[];
 }) {
+  const t = useT();
   const marked = new Set(highlight);
   const texts = doc.layers.filter((l) => l.type === "text" && l.text);
 
@@ -30,7 +32,7 @@ export default function PanelMap({
       <svg
         viewBox={`0 ${minY} ${doc.width} ${h}`}
         role="img"
-        aria-label="Where each piece of text prints on the unfolded box"
+        aria-label={t("views.panelMap.label")}
         style={{ minWidth: 520 }}
       >
         {doc.panels.map((p) => (
@@ -69,6 +71,7 @@ export default function PanelMap({
 }
 
 function Block({ layer, marked }: { layer: DesignLayer; marked: boolean }) {
+  const t = useT();
   const named = layer.name.trim().length > 0;
   return (
     <g transform={layer.rotation ? `rotate(${layer.rotation} ${layer.x} ${layer.y})` : undefined}>
@@ -91,7 +94,7 @@ function Block({ layer, marked }: { layer: DesignLayer; marked: boolean }) {
         }
       >
         <title>
-          {(layer.name || "unnamed") + " — " + layer.text.slice(0, 80)}
+          {(layer.name || t("views.panelMap.unnamed")) + " — " + layer.text.slice(0, 80)}
         </title>
       </rect>
     </g>

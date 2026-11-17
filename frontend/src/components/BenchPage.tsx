@@ -17,6 +17,7 @@ import {
 } from "../lib/mcp";
 import { editable, parseDesign, type DesignDoc, type DesignLayer } from "../lib/design";
 import PanelMap from "./PanelMap";
+import { useT, type Translate } from "../i18n";
 
 const card = "rounded-xl border border-stone-200 dark:border-zinc-800 bg-white dark:bg-zinc-900";
 
@@ -30,14 +31,18 @@ type Job =
   | { kind: "ready"; url: string }
   | { kind: "failed"; why: string };
 
+/** A problem to show, as the key of its words, so it follows a change of language. */
+type Problem = Parameters<Translate>[0] | "";
+
 export default function BenchPage() {
+  const t = useT();
   const [params, setParams] = useSearchParams();
   const [designs, setDesigns] = useState<MyProduct[]>([]);
   const [doc, setDoc] = useState<DesignDoc | null>(null);
   const [fileName, setFileName] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [job, setJob] = useState<Job>({ kind: "idle" });
-  const [problem, setProblem] = useState("");
+  const [problem, setProblem] = useState<Problem>("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const chosen = params.get("design") ?? "";
@@ -63,7 +68,7 @@ export default function BenchPage() {
     try {
       const parsed = parseDesign(JSON.parse(await f.text()));
       if (!parsed.layers.length) {
-        setProblem("That file has no text on it — is it a Design Studio export?");
+        setProblem("views.bench.noText");
         return;
       }
       setDoc(parsed);
@@ -72,13 +77,13 @@ export default function BenchPage() {
       for (const l of editable(parsed)) seed[l.name] = l.text;
       setValues(seed);
     } catch {
-      setProblem("That file could not be read as a design.");
+      setProblem("views.bench.unreadable");
     }
   }
 
   async function make() {
     if (!chosen) {
-      setProblem("Choose which design to make artwork from.");
+      setProblem("views.bench.pickDesign");
       return;
     }
     const payload: ArtworkField[] = fields
@@ -86,7 +91,7 @@ export default function BenchPage() {
       .map((l) => ({ fieldId: l.name, type: l.type === "image" ? "image" : "text", value: values[l.name] }));
 
     if (!payload.length) {
-      setProblem("Change something first.");
+      setProblem("views.bench.changeFirst");
       return;
     }
     setProblem("");
@@ -97,7 +102,7 @@ export default function BenchPage() {
         clientReqId: `bench-${chosen}-${Date.now()}`,
       });
       if (!r.success || !r.job_id) {
-        setJob({ kind: "failed", why: r.error ?? "It could not be started." });
+        setJob({ kind: "failed", why: r.error ?? t("views.bench.notStarted") });
         return;
       }
       setJob({ kind: "working", jobId: r.job_id, status: r.status ?? "" });
@@ -116,7 +121,7 @@ export default function BenchPage() {
         if (!live) return;
         const word = (s.status ?? "").toUpperCase();
         if (DONE.has(word) && s.artwork_url) setJob({ kind: "ready", url: s.artwork_url });
-        else if (FAILED.has(word)) setJob({ kind: "failed", why: s.error ?? `Ended as ${s.status}.` });
+        else if (FAILED.has(word)) setJob({ kind: "failed", why: s.error ?? t("views.bench.endedAs", { status: s.status ?? word }) });
         else setJob({ kind: "working", jobId: job.jobId, status: s.status ?? word });
       } catch {
         /* keep waiting; a hiccup is not a verdict */
@@ -132,14 +137,14 @@ export default function BenchPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
       <header className="mb-5 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold tracking-tight">Bench</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{t("views.bench.title")}</h1>
         <select
           value={chosen}
           onChange={(e) => setParams(e.target.value ? { design: e.target.value } : {})}
-          aria-label="Which design"
+          aria-label={t("views.bench.which")}
           className="rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm dark:border-zinc-800 dark:bg-zinc-900"
         >
-          <option value="">Choose a design…</option>
+          <option value="">{t("views.bench.choose")}</option>
           {designs.map((d) => (
             <option key={d.id} value={d.id}>
               {d.title ?? d.id}
@@ -149,11 +154,11 @@ export default function BenchPage() {
         <div className="ml-auto">
           <button
             onClick={() => fileRef.current?.click()}
-            title="Read the design file so its editable text can be listed"
+            title={t("views.bench.fileTitle")}
             className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 px-3 py-1.5 text-sm transition-colors hover:bg-stone-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
           >
             <Upload className="h-4 w-4" />
-            {fileName ? "Change file" : "Open design file"}
+            {fileName ? t("views.bench.changeFile") : t("views.bench.openFile")}
           </button>
           <input
             ref={fileRef}
@@ -172,10 +177,10 @@ export default function BenchPage() {
         <div className={`${card} p-8 text-center`}>
           <Wand2 className="mx-auto mb-3 h-8 w-8 text-stone-300 dark:text-zinc-700" />
           <p className="text-sm text-stone-600 dark:text-zinc-400">
-            Open your design file to see what you can change.
+            {t("views.bench.openHint")}
           </p>
           <p className="mx-auto mt-2 max-w-md text-xs text-stone-400 dark:text-zinc-500">
-            In Roastify’s designer: File → Export → Project .json. It stays on this device.
+            {t("views.bench.exportHint")}
           </p>
         </div>
       )}
@@ -190,10 +195,7 @@ export default function BenchPage() {
               <div>
                 {doc.duplicates.map((d) => (
                   <p key={d.text} className="text-amber-900 dark:text-amber-200">
-                    “{d.text.slice(0, 46)}” prints in {d.layers.length} places
-                    {d.layers.some((l) => l.panel) &&
-                      ` — ${[...new Set(d.layers.map((l) => l.panel).filter(Boolean))].join(", ")}`}
-                    .
+                    {repeatedLine(t, d.text.slice(0, 46), d.layers)}
                   </p>
                 ))}
               </div>
@@ -201,15 +203,15 @@ export default function BenchPage() {
           )}
 
           <section className={`${card} p-4`}>
-            <h2 className="mb-3 text-sm font-semibold">What it says</h2>
+            <h2 className="mb-3 text-sm font-semibold">{t("views.bench.says")}</h2>
 
             {!fields.length && (
               <div className="rounded-lg border border-dashed border-stone-300 p-4 text-sm dark:border-zinc-700">
                 <p className="text-stone-600 dark:text-zinc-400">
-                  Nothing on this design can be changed from here yet.
+                  {t("views.bench.nothing")}
                 </p>
                 <p className="mt-1 text-xs text-stone-400 dark:text-zinc-500">
-                  Name a layer in Roastify’s designer and it becomes editable here.
+                  {t("views.bench.nameLayer")}
                 </p>
               </div>
             )}
@@ -222,7 +224,7 @@ export default function BenchPage() {
                     {l.panel && <span className="text-stone-400 dark:text-zinc-600">{l.panel}</span>}
                     {repeated.has(l.id) && (
                       <span
-                        title={`Also prints in ${repeated.get(l.id)!.length - 1} other place(s)`}
+                        title={t("views.bench.alsoPrints", { count: repeated.get(l.id)!.length - 1 })}
                         className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400"
                       >
                         <AlertTriangle className="h-3.5 w-3.5" />
@@ -247,13 +249,13 @@ export default function BenchPage() {
                   className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
                 >
                   <Wand2 className="h-4 w-4" />
-                  Make artwork
+                  {t("views.bench.make")}
                 </button>
 
                 {job.kind === "working" && (
                   <span className="inline-flex items-center gap-1.5 text-sm text-stone-500 dark:text-zinc-400">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Making it…
+                    {t("views.bench.making")}
                   </span>
                 )}
                 {job.kind === "ready" && (
@@ -264,7 +266,7 @@ export default function BenchPage() {
                     className="inline-flex items-center gap-1.5 text-sm font-medium text-green-700 dark:text-green-400"
                   >
                     <ImageDown className="h-4 w-4" />
-                    Artwork ready
+                    {t("views.bench.ready")}
                     <ExternalLink className="h-3.5 w-3.5" />
                   </a>
                 )}
@@ -279,9 +281,18 @@ export default function BenchPage() {
 
       {problem && (
         <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-400">
-          {problem}
+          {t(problem)}
         </p>
       )}
     </div>
   );
+}
+
+/** "“Our story” prints in 3 places: FRONT, BACK." — the panels only when the design names them. */
+function repeatedLine(t: Translate, text: string, layers: DesignLayer[]): string {
+  const panels = [...new Set(layers.map((l) => l.panel).filter(Boolean))];
+  const count = layers.length;
+  return panels.length
+    ? t("views.bench.repeatedOn", { text, count, panels: panels.join(", ") })
+    : t("views.bench.repeated", { text, count });
 }

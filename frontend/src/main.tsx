@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { configureTollbooth } from "@tollbooth-dpyc/web";
 import { ErrorBoundary } from "@tollbooth-dpyc/web/react";
 import App from "./App";
+import { registerRoastify } from "./i18n";
 import "./index.css";
 
 // The shared account pieces (profile, session key, avatar, theme) read who
@@ -13,6 +14,10 @@ configureTollbooth({
   mcpUrl: import.meta.env.VITE_MCP_URL as string,
   operatorUrl: "https://roastify-mcp.fastmcp.app",
 });
+
+// Roastify's words, before the first render. The package's AppShell then starts
+// the reader's language: their choice, else their country's, else English.
+void registerRoastify();
 
 // Last guard: a render-time throw shows a calm card, not a white screen.
 const crash = {
