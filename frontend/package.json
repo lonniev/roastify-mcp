@@ -7,11 +7,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build && vite build --config vite.courier.config.ts",
     "preview": "vite preview",
+    "test": "node --experimental-strip-types --test 'src/lib/*.test.ts'",
     "lint": "eslint src --ext ts,tsx"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
-    "@tollbooth-dpyc/web": "3.8.0",
+    "@tollbooth-dpyc/web": "3.10.0",
     "lucide-react": "^1.59.0",
     "nostr-tools": "^2.25.2",
     "react": "^19.3.1",

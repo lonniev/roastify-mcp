@@ -5,22 +5,22 @@ import { Link, useLocation } from "react-router-dom";
 import { Coffee, Layers, Wand2, Wallet } from "lucide-react";
 import { SiteNav, matchesPath, useAppShell, type SiteNavItem } from "@tollbooth-dpyc/web/react";
 import { navLook } from "../lib/look";
-
-const PAGES: readonly SiteNavItem[] = [
-  { href: "/", label: "Catalog", icon: <Coffee />, end: true, title: "Catalog" },
-  { href: "/designs", label: "Designs", icon: <Layers />, title: "Designs" },
-  { href: "/bench", label: "Bench", icon: <Wand2 />, title: "Bench" },
-  { href: "/wallet", label: "Wallet", icon: <Wallet />, title: "Wallet" },
-];
-
-const ACCOUNT_LINKS: readonly SiteNavItem[] = [
-  { href: "/profile", label: "Profile & theme" },
-  { href: "/wallet", label: "Wallet" },
-];
+import { useT } from "../i18n";
 
 export default function Nav() {
   const { session } = useAppShell();
   const { pathname } = useLocation();
+  const t = useT();
+  const pages: readonly SiteNavItem[] = [
+    { href: "/", label: t("ui.nav.catalog"), icon: <Coffee />, end: true, title: t("ui.nav.catalog") },
+    { href: "/designs", label: t("ui.nav.designs"), icon: <Layers />, title: t("ui.nav.designs") },
+    { href: "/bench", label: t("ui.nav.bench"), icon: <Wand2 />, title: t("ui.nav.bench") },
+    { href: "/wallet", label: t("ui.nav.wallet"), icon: <Wallet />, title: t("ui.nav.wallet") },
+  ];
+  const accountLinks: readonly SiteNavItem[] = [
+    { href: "/profile", label: t("ui.nav.profile") },
+    { href: "/wallet", label: t("ui.nav.wallet") },
+  ];
   return (
     <SiteNav
       brand={
@@ -29,14 +29,14 @@ export default function Nav() {
           <span className="font-semibold tracking-wide">Roastify</span>
         </Link>
       }
-      items={PAGES}
+      items={pages}
       isActive={(href, item) => matchesPath(pathname, href, item.end)}
       renderLink={({ href, children, ...rest }) => (
         <Link to={href} {...rest}>
           {children}
         </Link>
       )}
-      account={{ npub: session.npub, links: ACCOUNT_LINKS, onSignOut: session.signOut }}
+      account={{ npub: session.npub, links: accountLinks, onSignOut: session.signOut }}
       classNames={navLook}
     />
   );

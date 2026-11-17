@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Coffee, Package, Ruler, Search, Leaf } from "lucide-react";
 import { browseCatalog, type BrowseCatalogResult, type Blend, type CatalogProduct } from "../lib/mcp";
-import { RefreshButton } from "@tollbooth-dpyc/web/react";
+import { RefreshButton, useLanguageLocale } from "@tollbooth-dpyc/web/react";
+import { useT } from "../i18n";
 import { refreshLook } from "../lib/look";
 
 const CACHE_KEY = "roastify:catalog:v1";
@@ -20,15 +21,19 @@ function readCache(): Cached | null {
   }
 }
 
-function ago(ms: number): string {
+/** How long ago, in the reader's language ("5 min. ago", "il y a 5 min"). */
+function ago(ms: number, locale: string): string {
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto", style: "short" });
   const m = Math.round((Date.now() - ms) / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
+  if (m < 1) return rtf.format(0, "second");
+  if (m < 60) return rtf.format(-m, "minute");
   const h = Math.round(m / 60);
-  return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
+  return h < 24 ? rtf.format(-h, "hour") : rtf.format(-Math.round(h / 24), "day");
 }
 
 export default function CatalogPage() {
+  const t = useT();
+  const locale = useLanguageLocale();
   const cached = readCache();
   const [data, setData] = useState<BrowseCatalogResult | null>(cached?.data ?? null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(cached?.at ?? null);
@@ -69,9 +74,9 @@ export default function CatalogPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
       <header className="mb-5 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold tracking-tight">Catalog</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{t("views.catalog.title")}</h1>
         {fetchedAt && (
-          <span className="text-xs text-stone-400 dark:text-zinc-500">Updated {ago(fetchedAt)}</span>
+          <span className="text-xs text-stone-400 dark:text-zinc-500">{t("views.catalog.updated", { when: ago(fetchedAt, locale) })}</span>
         )}
         <div className="ml-auto flex items-center gap-2">
           <label className="relative">
@@ -79,8 +84,8 @@ export default function CatalogPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Filter"
-              aria-label="Filter the catalog"
+              placeholder={t("views.catalog.filter")}
+              aria-label={t("views.catalog.filterLabel")}
               className="w-40 rounded-lg border border-stone-200 bg-white py-1.5 pl-8 pr-2 text-sm outline-none focus:border-amber-400 dark:border-zinc-800 dark:bg-zinc-900 sm:w-56"
             />
           </label>
@@ -94,14 +99,14 @@ export default function CatalogPage() {
         </p>
       )}
       {loading && !data && (
-        <p className="py-12 text-center text-sm text-stone-400 dark:text-zinc-500">Loading…</p>
+        <p className="py-12 text-center text-sm text-stone-400 dark:text-zinc-500">{t("ui.app.loading")}</p>
       )}
       {data && (
         <>
           {blends.length > 0 && (
             <section className="mb-6">
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-stone-400 dark:text-zinc-500">
-                Coffees
+                {t("views.catalog.coffees")}
               </h2>
               <div className="flex flex-wrap gap-2">
                 {blends.map((b) => (
@@ -113,7 +118,7 @@ export default function CatalogPage() {
 
           <section>
             <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-stone-400 dark:text-zinc-500">
-              Packaging
+              {t("views.catalog.packaging")}
             </h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {shown.map((p) => (
@@ -122,7 +127,7 @@ export default function CatalogPage() {
             </div>
             {needle && !shown.length && (
               <p className="py-8 text-center text-sm text-stone-400 dark:text-zinc-500">
-                Nothing matches “{q}”.
+                {t("views.catalog.noMatch", { q })}
               </p>
             )}
           </section>
@@ -133,6 +138,7 @@ export default function CatalogPage() {
 }
 
 function BlendChip({ blend }: { blend: Blend }) {
+  const t = useT();
   return (
     <span
       title={blend.description || blend.name}
@@ -144,13 +150,14 @@ function BlendChip({ blend }: { blend: Blend }) {
         <span className="text-xs text-stone-400 dark:text-zinc-500">{titleCase(blend.roastLevel)}</span>
       )}
       {blend.isDecaf && (
-        <Leaf className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-label="Decaf" />
+        <Leaf className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-label={t("views.catalog.decaf")} />
       )}
     </span>
   );
 }
 
 function ProductCard({ product }: { product: CatalogProduct }) {
+  const t = useT();
   return (
     <article className="overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
       {product.imageUrl ? (
@@ -170,7 +177,7 @@ function ProductCard({ product }: { product: CatalogProduct }) {
           <h3 className="flex-1 text-sm font-medium leading-snug">{product.title ?? product.id}</h3>
           {product.plan && (
             <span
-              title={`Included with the ${titleCase(product.plan)} plan`}
+              title={t("views.catalog.plan", { plan: titleCase(product.plan) })}
               className="rounded border border-stone-200 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-500 dark:border-zinc-700 dark:text-zinc-400"
             >
               {product.plan}
@@ -185,7 +192,7 @@ function ProductCard({ product }: { product: CatalogProduct }) {
             </span>
           )}
           {typeof product.variants === "number" && product.variants > 0 && (
-            <span className="inline-flex items-center gap-1" title="Sizes and grinds available">
+            <span className="inline-flex items-center gap-1" title={t("views.catalog.variants")}>
               <Ruler className="h-3.5 w-3.5" />
               {product.variants}
             </span>
