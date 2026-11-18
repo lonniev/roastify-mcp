@@ -42,7 +42,7 @@ export default function App() {
               <Route
                 path="wallet"
                 element={
-                  <div className="max-w-3xl mx-auto px-4 py-6">
+                  <div className="max-w-[90rem] mx-auto px-4 py-6">
                     <Wallet />
                   </div>
                 }
