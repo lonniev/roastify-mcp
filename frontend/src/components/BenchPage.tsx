@@ -135,7 +135,7 @@ export default function BenchPage() {
   }, [job]);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6">
+    <div className="mx-auto max-w-[90rem] px-4 py-6">
       <header className="mb-5 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-semibold tracking-tight">{t("views.bench.title")}</h1>
         <select
@@ -179,7 +179,7 @@ export default function BenchPage() {
           <p className="text-sm text-stone-600 dark:text-zinc-400">
             {t("views.bench.openHint")}
           </p>
-          <p className="mx-auto mt-2 max-w-md text-xs text-stone-400 dark:text-zinc-500">
+          <p className="mt-2 text-xs text-stone-400 dark:text-zinc-500">
             {t("views.bench.exportHint")}
           </p>
         </div>

@@ -45,7 +45,7 @@ export default function DesignsPage() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6">
+    <div className="mx-auto max-w-[90rem] px-4 py-6">
       <header className="mb-5 flex items-center gap-3">
         <h1 className="text-xl font-semibold tracking-tight">{t("views.designs.title")}</h1>
         <div className="ml-auto">
