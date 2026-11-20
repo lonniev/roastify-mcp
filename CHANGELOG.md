@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Changes not yet released live in `changelog.d/`, one file per change — see the README there for why, and `scripts/changelog.py` for what folds them in at release time.
 
+## [0.23.2] — 2026-11-20
+
+### Changed
+
+- The Profile page now sits in folding groups — You, Money, This site, About — with its panels side by side in a grid.
+- Your language is under You; your Roastify key is under This site.
+
 ## [0.23.1] — 2026-11-19
 
 ### Added
