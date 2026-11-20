@@ -1,5 +1,5 @@
-// Profile: the package's AccountPage in the Bench's look, with Roastify's own
-// panel in its slot — the Roastify key after the session key.
+// Profile: the package's AccountPage in the Bench's look, in its folding groups.
+// Your language joins You; the Roastify key is This site's panel.
 
 import type { ReactNode } from "react";
 import { translate, type Theme } from "@tollbooth-dpyc/web";
@@ -21,9 +21,14 @@ export default function ProfilePage() {
       npub={session.npub}
       onSignOut={session.signOut}
       classNames={accountLook}
-      between={{
-        sessionKey: (
-          <>
+      panels={{
+        you: (
+          <section className={accountLook.section}>
+            <h2 className={accountLook.sectionHeading}>{t("views.profile.language.heading")}</h2>
+            <LanguageChooser classNames={themeLook} />
+          </section>
+        ),
+        site: (
           <PatronCredentialsPanel
             npub={session.npub}
             heading={t("views.profile.account.heading")}
@@ -36,11 +41,6 @@ export default function ProfilePage() {
             }}
             classNames={keyPanelLook}
           />
-          <section className={accountLook.section}>
-            <h2 className={accountLook.sectionHeading}>{t("views.profile.language.heading")}</h2>
-            <LanguageChooser classNames={themeLook} />
-          </section>
-          </>
         ),
       }}
       usage={{ classNames: usageLook }}
