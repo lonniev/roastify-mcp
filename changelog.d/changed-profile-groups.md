@@ -1,0 +1,2 @@
+- The Profile page now sits in folding groups — You, Money, This site, About — with its panels side by side in a grid.
+- Your language is under You; your Roastify key is under This site.
