@@ -1,1 +1,0 @@
-- The Roastify key panel on Profile now comes from `@tollbooth-dpyc/web` 2.8.0. It looks and works as before, with the "Connected" badge confirming a stored key.
