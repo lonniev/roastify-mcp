@@ -1,1 +1,0 @@
-- The MCP Registry listing carries a title (Roastify) and a link to https://roastify.tollbooth-dpyc.com.

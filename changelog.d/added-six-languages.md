@@ -1,3 +1,0 @@
-- The Design Bench speaks English, French, Spanish, Japanese, Chinese and Hindi. It opens in the visitor's saved choice, else their country's language, else English, and a language row sits in the footer and on Profile.
-- Dates, prices and counts follow the chosen language.
-- The bundle splits React, the MCP client and the Nostr code into their own chunks, so none is over 500 kB.

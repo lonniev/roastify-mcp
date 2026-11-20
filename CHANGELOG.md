@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Changes not yet released live in `changelog.d/`, one file per change — see the README there for why, and `scripts/changelog.py` for what folds them in at release time.
 
+## [0.23.1] — 2026-11-19
+
+### Added
+
+- The Design Bench speaks English, French, Spanish, Japanese, Chinese and Hindi. It opens in the visitor's saved choice, else their country's language, else English, and a language row sits in the footer and on Profile.
+- Dates, prices and counts follow the chosen language.
+- The bundle splits React, the MCP client and the Nostr code into their own chunks, so none is over 500 kB.
+
+### Changed
+
+- Runs on tollbooth-dpyc 0.106.0 and @tollbooth-dpyc/web 2.6.0, so Pay opens your own Lightning wallet and an open invoice says the page is watching for it.
+
+- Each page loads the first time it opens, so the first visit downloads about a twelfth less.
+
+- The MCP Registry listing carries a title (Roastify) and a link to https://roastify.tollbooth-dpyc.com.
+
+- `/llms.txt` is built by the shared `@tollbooth-dpyc/web/agent-guide` plugin from this service's own sections, so its connecting, payments, license and links sections match the rest of the fleet.
+
+- The Roastify key panel on Profile now comes from `@tollbooth-dpyc/web` 2.8.0. It looks and works as before, with the "Connected" badge confirming a stored key.
+
+- The wallet is now the shared one from tollbooth-web 3.0.0, with a QR code on an open invoice, amounts of 100 to 25,000 plus Custom, and coupons and the statement always shown.
+
+### Fixed
+
+- Text uses the width the screen gives it: pages and their text blocks no longer stop partway across a wide screen.
+
 ## [0.23.0] — 2026-10-21
 
 ### Added
