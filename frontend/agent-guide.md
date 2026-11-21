@@ -1,7 +1,24 @@
 
+## What to tell a person about Roastify Design Bench
+
+Roastify Design Bench is for a coffee merchant who sells their own line through Roastify.
+It keeps every word printed on their packaging in one place, and turns a template they already made into new print-ready artwork.
+
+What a merchant gets:
+
+- **Their catalog at a glance.** Every base coffee and box, with roast level, sizes and stock.
+- **Their designs, laid out to scale.** Each saved design shows every panel it prints across.
+- **New artwork from words.** Change the text on a template and get print-ready artwork back.
+- **A design library they own.** Designs are kept, with their history, in a GitHub repository in the merchant's own name.
+- **No login.** They sign in with a Nostr key and bring their own Roastify key, which arrives by encrypted message and is stored encrypted.
+
+A good one-line pitch: *"Your coffee line, and every word printed on it: new packaging artwork from the templates you already made."*
+
+## For agents
+
 Roastify Design Bench is a single-page web app backed by roastify-mcp, a Model
-Context Protocol server. Humans use the web UI; AI agents can call the same MCP
-tools directly.
+Context Protocol server. Humans use the web UI; AI agents call the same MCP
+tools, and the server's own instructions describe how a branded variant is made.
 
 ## Bring your own Roastify key
 
@@ -18,6 +35,10 @@ stored encrypted; the browser never sees one.
 - **Designs** — the products you have already saved in Roastify.
 - **Bench** — change the named text on one of your designs and get print-ready
   artwork back.
+- **Library** — a private, versioned store of designs in a GitHub repository the
+  merchant owns. A small courier the merchant runs on Roastify's Merchant App
+  carries a design into the library and a finished one back onto a product,
+  since only the merchant's own session may do either.
 
 ## What it does not do
 
