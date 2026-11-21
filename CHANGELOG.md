@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Changes not yet released live in `changelog.d/`, one file per change — see the README there for why, and `scripts/changelog.py` for what folds them in at release time.
 
+## [0.23.3] — 2026-11-21
+
+### Changed
+
+- llms.txt opens with what to tell a merchant about the Design Bench, and describes the design library and its courier.
+
 ## [0.23.2] — 2026-11-20
 
 ### Changed
