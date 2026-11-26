@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Changes not yet released live in `changelog.d/`, one file per change — see the README there for why, and `scripts/changelog.py` for what folds them in at release time.
 
+## [0.23.6] — 2026-11-26
+
+### Fixed
+
+- Sign-in takes a NIP-05 address (name@domain) as well as an npub or nsec (@tollbooth-dpyc/web 4.2.2).
+
 ## [0.23.5] — 2026-11-25
 
 ### Changed
