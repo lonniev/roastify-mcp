@@ -4,7 +4,7 @@
   "title": "Roastify",
   "description": "Roastify Developer API MCP Service — Tollbooth DPYC monetization",
   "websiteUrl": "https://roastify.tollbooth-dpyc.com",
-  "version": "0.23.6",
+  "version": "0.23.7",
   "repository": {
     "url": "https://github.com/lonniev/roastify-mcp",
     "source": "github"
