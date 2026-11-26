@@ -1,0 +1,11 @@
+# Horizon deploy-cache buster.
+# Touched when deploy-verify reports a stale wheel (service_status version/sha
+# lagging main). Changing this file forces Horizon to rebuild rather than
+# re-serve cached bytes. See capability: Horizon Deploy Freshness.
+#
+# issue: https://github.com/lonniev/roastify-mcp/issues/246
+# expected_main_sha: 92e4aee9c2ed0fbe621349ca8961e707c8dcdf0c
+# observed_live_sha: 528a28ad90985f77bb3112c26d5fb2e5c8a09ce2
+# observed_live_version: 0.23.4
+# bumped_to: 0.23.5
+# touched_at: 2026-11-26T03:15:00Z

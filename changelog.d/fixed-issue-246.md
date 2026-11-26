@@ -1,0 +1,1 @@
+- Horizon was still serving commit `528a28ad` / `0.23.4` after `92e4aee9` merged; bump to `0.23.5` and touch `.deploy-trigger` so the next rebuild is not byte-identical to the cached wheel.
