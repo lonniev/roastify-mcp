@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Changes not yet released live in `changelog.d/`, one file per change — see the README there for why, and `scripts/changelog.py` for what folds them in at release time.
 
+## [0.23.7] — 2026-11-26
+
+### Changed
+
+- Runs on tollbooth-dpyc 0.131.1: patrons can sign in with a NIP-05 address (name@domain), and a mistyped one says which part to check.
+
 ## [0.23.6] — 2026-11-26
 
 ### Fixed
