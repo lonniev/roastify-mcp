@@ -189,6 +189,13 @@ Roastify's API is version **0.3.1** and its own spec marks it **beta, "subject t
 Expect to follow breaking upstream edits, and weigh that before promising this operator's
 catalog to third-party merchants.
 
+<!-- dpyc-family -->
+## Part of Tollbooth DPYC™
+
+This service is one of the Tollbooth DPYC™ family of MCP servers.
+Browse them all in the [MCP catalog](https://cafe.tollbooth-dpyc.com/collections/mcps).
+The [DPYC Oracle](https://dpyc-oracle.fastmcp.app/mcp) lists the live network with its free `list_services` tool.
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
